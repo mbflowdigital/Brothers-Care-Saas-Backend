@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\BrothersCare.Application\BrothersCare.Application.csproj" />
+    <ProjectReference Include="..\BrothersCare.Domain\BrothersCare.Domain.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <RootNamespace>BrothersCare.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

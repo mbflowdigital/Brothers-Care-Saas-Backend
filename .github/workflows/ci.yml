@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore BrothersCare.slnx
+
+      - name: Build
+        run: dotnet build BrothersCare.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test BrothersCare.slnx --configuration Release --no-build
+
+      - name: Verify formatting
+        run: dotnet format BrothersCare.slnx --verify-no-changes --no-restore

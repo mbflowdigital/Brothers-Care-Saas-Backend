@@ -1,0 +1,9 @@
+@BrothersCare_Api_HostAddress = http://localhost:5100
+
+GET {{BrothersCare_Api_HostAddress}}/health/live
+Accept: application/json
+
+###
+
+GET {{BrothersCare_Api_HostAddress}}/health/ready
+Accept: application/json

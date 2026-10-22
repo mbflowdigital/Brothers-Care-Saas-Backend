@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <!-- Direct pin avoids vulnerable transitive Microsoft.OpenApi versions. -->
+    <PackageReference Include="Microsoft.OpenApi" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BrothersCare.Application\BrothersCare.Application.csproj" />
+    <ProjectReference Include="..\BrothersCare.Infrastructure\BrothersCare.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
