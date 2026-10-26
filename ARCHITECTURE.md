@@ -15,7 +15,7 @@ Api ───────────────> Application ─────�
 
 - **Domain**: modelo, invariantes e comportamento do domínio. Não referencia outras camadas nem frameworks de infraestrutura.
 - **Application**: coordena casos de uso e define contratos necessários por eles. Depende somente de Domain entre os projetos da solução.
-- **Infrastructure**: implementa contratos para PostgreSQL, mensageria e serviços externos. Pode depender de Application e Domain. Mapeamentos EF Core pertencem aqui; o domínio não recebe atributos de persistência.
+- **Infrastructure**: implementa contratos para SQL Server, mensageria e serviços externos. Pode depender de Application e Domain. Mapeamentos EF Core pertencem aqui; o domínio não recebe atributos de persistência.
 - **Api**: composition root, configuração HTTP e tradução de entrada/saída. Referencia Application e Infrastructure para composição. Endpoints, controllers e middleware permanecem finos e não contêm regras de domínio.
 
 `Program.cs` é o ponto de composição. Cada camada expõe apenas seu registro de serviços. Novas features devem ser organizadas por capacidade de negócio dentro das camadas existentes; novos projetos ou kernels compartilhados exigem uma necessidade concreta.
@@ -33,9 +33,11 @@ Api ───────────────> Application ─────�
 
 ## Persistência
 
-PostgreSQL e EF Core são a direção planejada, mas dependem de um modelo aprovado. O `DbContext`, provider, entidades, configurações, schema e migrações serão introduzidos junto da primeira necessidade real. A configuração será opcional por ambiente durante o desenvolvimento e credenciais virão de variáveis, user secrets ou um cofre; nunca do repositório.
+SQL Server e EF Core formam a persistência inicial. `BrothersCareDbContext`, o provider SQL Server e as configurações EF Core ficam em Infrastructure; credenciais vêm de variáveis, user secrets ou um cofre, nunca do repositório. A configuração é opcional enquanto a API não expõe funcionalidades que dependam do banco.
 
-Entidades de domínio não serão entidades anêmicas moldadas pelo EF. Configurações `IEntityTypeConfiguration` e demais detalhes de armazenamento permanecerão em Infrastructure. Migrações deverão ser revisáveis e executadas por processo operacional explícito.
+O primeiro schema cobre tenants, unidades, usuários, memberships, pacientes, profissionais, vínculos de cuidado, atendimentos e evoluções. Todos os registros operacionais e clínicos possuem `tenant_id` obrigatório. Relações entre registros scoped usam chaves compostas que incluem `tenant_id`, impedindo referências entre empresas no banco. `users` e `tenants` são globais; detalhes de acesso e autorização continuam dependentes da identidade autenticada e dos casos de uso.
+
+Entidades de domínio não serão entidades anêmicas moldadas pelo EF. Configurações EF Core e demais detalhes de armazenamento permanecem em Infrastructure. Migrações devem ser revisáveis e executadas por processo operacional explícito.
 
 ## Multi-tenancy, identidade e autorização
 
@@ -43,7 +45,7 @@ O produto será multi-tenant. O isolamento do tenant deve ser aplicado e validad
 
 Autenticação, memberships, papéis e escopo por unidade serão modelados quando identity e tenants forem implementados. Autorização será server-side, próxima do caso de uso e testada; filtros de UI e guards do frontend não são controles de segurança. A suíte futura deve incluir tentativas de acesso cruzado entre empresas, inclusive por identificadores conhecidos, consultas, alterações e operações em lote.
 
-Não há nesta etapa tenant resolution, login, claims, membership ou autorização. Nenhum mecanismo fictício deve ser confundido com proteção real.
+O schema já armazena memberships e escopos por unidade, mas ainda não há tenant resolution, login, claims ou autorização. Nenhum mecanismo de armazenamento deve ser confundido com proteção real.
 
 ## Segurança e privacidade
 
