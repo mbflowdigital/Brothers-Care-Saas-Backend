@@ -80,6 +80,8 @@ A proposta de regras e transições de estado para pacientes, profissionais, age
 
 As convenções propostas para OpenAPI, contratos HTTP, paginação, filtros, datas, valores monetários e erros estão em [docs/http-api-contracts.md](docs/http-api-contracts.md).
 
+A especificação completa para login, sessão, expiração, logout, ativação e recuperação de acesso está em [docs/authentication-implementation.md](docs/authentication-implementation.md).
+
 ## Dependências adicionais
 
 `Swashbuckle.AspNetCore` publica o documento e a UI Swagger apenas em desenvolvimento. `Microsoft.AspNetCore.Mvc.Testing` hospeda a API em memória nos testes de integração. xUnit e Microsoft.NET.Test.Sdk formam a infraestrutura mínima de testes. Não foi adicionada biblioteca de arquitetura: os testes usam reflexão do próprio .NET.
