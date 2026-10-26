@@ -1,3 +1,5 @@
+using BrothersCare.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,7 +14,12 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        // Register persistence and external adapters here when their contracts exist.
+        var connectionString = configuration.GetConnectionString("BrothersCare");
+        if (!string.IsNullOrWhiteSpace(connectionString))
+        {
+            services.AddDbContext<BrothersCareDbContext>(options => options.UseSqlServer(connectionString));
+        }
+
         return services;
     }
 }

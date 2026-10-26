@@ -5,7 +5,7 @@ Fundação técnica da API SaaS do Brothers Care. Esta etapa estabelece arquitet
 ## Requisitos
 
 - .NET SDK 10.0.301 ou patch compatível da linha 10.0, conforme `global.json`.
-- PostgreSQL não é necessário nesta etapa.
+- SQL Server é necessário para executar funcionalidades persistentes quando forem adicionadas. A fundação HTTP e os health checks continuam podendo ser executados sem banco configurado.
 
 ## Comandos locais
 
@@ -33,7 +33,22 @@ $env:Cors__AllowedOrigins__0 = "https://localhost:3000"
 dotnet run --project src/BrothersCare.Api
 ```
 
-Sem `Cors:AllowedOrigins`, nenhuma política CORS é habilitada. Uma futura conexão poderá usar o placeholder `ConnectionStrings__BrothersCare`; ainda não há provider, contexto EF ou acesso a banco configurado.
+Sem `Cors:AllowedOrigins`, nenhuma política CORS é habilitada. Para habilitar a persistência, informe a conexão somente por variável de ambiente ou user secrets:
+
+```powershell
+$env:ConnectionStrings__BrothersCare = "Server=localhost;Database=BrothersCare;Trusted_Connection=True;TrustServerCertificate=True"
+```
+
+O provider SQL Server e o `DbContext` ficam em Infrastructure. Não há credenciais de banco versionadas.
+
+## Migrações
+
+As migrações são geradas a partir do projeto Infrastructure e devem ser revisadas em pull request. Para aplicar uma migração em ambiente local, configure `ConnectionStrings__BrothersCare` e execute:
+
+```powershell
+dotnet tool restore
+dotnet ef database update --project src/BrothersCare.Infrastructure --startup-project src/BrothersCare.Api
+```
 
 ## Projetos
 
@@ -52,4 +67,4 @@ As versões NuGet ficam em `Directory.Packages.props`; regras comuns de compila�
 
 ## Fora do escopo atual
 
-Não existem cadastro, autenticação, autorização, tenants, clínicas, pacientes, agenda, financeiro, entidades, schema, migrações, EF Core nem integração PostgreSQL. Consulte `ARCHITECTURE.md` antes de introduzir qualquer um desses itens e `AGENTS.md` antes de contribuir com assistência de IA.
+O modelo inicial contém tenants, unidades, usuários, memberships, pacientes, profissionais, vínculos de cuidado, atendimentos e evoluções para suportar as primeiras migrações. Ainda não existem endpoints, autenticação, autorização, casos de uso nem operações funcionais para esses domínios. Consulte `ARCHITECTURE.md` antes de ampliar o modelo e `AGENTS.md` antes de contribuir com assistência de IA.
