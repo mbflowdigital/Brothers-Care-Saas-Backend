@@ -7,7 +7,6 @@ using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
-#pragma warning disable IDE0161, CA1861
 
 namespace BrothersCare.Infrastructure.Persistence.Migrations
 {
@@ -225,6 +224,33 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "Status", "FullName");
 
                     b.ToTable("professionals", (string)null);
+                });
+
+            modelBuilder.Entity("BrothersCare.Domain.Identity.PlatformAdministrator", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "Role");
+
+                    b.ToTable("platform_administrators", (string)null);
                 });
 
             modelBuilder.Entity("BrothersCare.Domain.Identity.User", b =>
@@ -461,6 +487,15 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.HasOne("BrothersCare.Domain.Tenancy.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BrothersCare.Domain.Identity.PlatformAdministrator", b =>
+                {
+                    b.HasOne("BrothersCare.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

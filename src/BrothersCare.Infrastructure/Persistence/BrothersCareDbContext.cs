@@ -19,6 +19,8 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
 
     public DbSet<PatientCareAssignment> PatientCareAssignments => Set<PatientCareAssignment>();
 
+    public DbSet<PlatformAdministrator> PlatformAdministrators => Set<PlatformAdministrator>();
+
     public DbSet<Professional> Professionals => Set<Professional>();
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
@@ -30,6 +32,7 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureUser(modelBuilder);
+        ConfigurePlatformAdministrator(modelBuilder);
         ConfigureTenant(modelBuilder);
         ConfigureClinicUnit(modelBuilder);
         ConfigureTenantMembership(modelBuilder);
@@ -62,6 +65,22 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
         entity.HasIndex(item => item.Status);
+    }
+
+    private static void ConfigurePlatformAdministrator(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<PlatformAdministrator>();
+        entity.ToTable("platform_administrators");
+        entity.HasKey(item => item.Id);
+        entity.Property(item => item.Id).ValueGeneratedNever();
+        entity.Property(item => item.Role).HasConversion<int>().IsRequired();
+        entity.Property(item => item.Status).HasConversion<int>().IsRequired();
+        entity.HasIndex(item => item.UserId).IsUnique();
+        entity.HasIndex(item => new { item.Status, item.Role });
+        entity.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(item => item.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 
     private static void ConfigureClinicUnit(ModelBuilder modelBuilder)

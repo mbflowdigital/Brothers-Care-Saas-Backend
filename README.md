@@ -50,6 +50,19 @@ dotnet tool restore
 dotnet ef database update --project src/BrothersCare.Infrastructure --startup-project src/BrothersCare.Api
 ```
 
+## Primeiro superadministrador
+
+Depois de aplicar a migração que inclui `platform_administrators`, o primeiro superadministrador pode ser provisionado sem gravar dados pessoais ou credenciais no repositório. Configure somente no ambiente seguro onde o comando será executado:
+
+```powershell
+$env:Bootstrap__SuperAdministrator__Email = "admin@empresa.exemplo"
+$env:Bootstrap__SuperAdministrator__DisplayName = "Administrador da plataforma"
+$env:Bootstrap__SuperAdministrator__Confirmation = "create-super-administrator"
+dotnet run --project src/BrothersCare.Api -- --bootstrap-super-administrator
+```
+
+O comando é idempotente para o mesmo usuário ativo. Ele cria a identidade global e o vínculo `platform_administrators`; não cria senha, token ou sessão. Esses elementos pertencem à futura implementação de autenticação.
+
 ## Projetos
 
 - `src/BrothersCare.Domain`: modelo e regras do domínio, sem infraestrutura.
@@ -60,6 +73,12 @@ dotnet ef database update --project src/BrothersCare.Infrastructure --startup-pr
 - `tests/BrothersCare.Api.IntegrationTests`: verifica a fundação HTTP pelo processo real de teste.
 
 As versões NuGet ficam em `Directory.Packages.props`; regras comuns de compilação ficam em `Directory.Build.props`.
+
+## Regras de negócio
+
+A proposta de regras e transições de estado para pacientes, profissionais, agenda, evoluções, financeiro e assinaturas está em [docs/mvp-business-rules.md](docs/mvp-business-rules.md). O documento distingue regras propostas de comportamentos ainda não aprovados.
+
+As convenções propostas para OpenAPI, contratos HTTP, paginação, filtros, datas, valores monetários e erros estão em [docs/http-api-contracts.md](docs/http-api-contracts.md).
 
 ## Dependências adicionais
 

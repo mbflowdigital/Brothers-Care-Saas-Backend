@@ -1,4 +1,6 @@
 using BrothersCare.Infrastructure.Persistence;
+using BrothersCare.Application.Identity;
+using BrothersCare.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +20,7 @@ public static class DependencyInjection
         if (!string.IsNullOrWhiteSpace(connectionString))
         {
             services.AddDbContext<BrothersCareDbContext>(options => options.UseSqlServer(connectionString));
+            services.AddScoped<IPlatformAdministratorBootstrapper, PlatformAdministratorBootstrapper>();
         }
 
         return services;

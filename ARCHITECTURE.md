@@ -35,7 +35,7 @@ Api ───────────────> Application ─────�
 
 SQL Server e EF Core formam a persistência inicial. `BrothersCareDbContext`, o provider SQL Server e as configurações EF Core ficam em Infrastructure; credenciais vêm de variáveis, user secrets ou um cofre, nunca do repositório. A configuração é opcional enquanto a API não expõe funcionalidades que dependam do banco.
 
-O primeiro schema cobre tenants, unidades, usuários, memberships, pacientes, profissionais, vínculos de cuidado, atendimentos e evoluções. Todos os registros operacionais e clínicos possuem `tenant_id` obrigatório. Relações entre registros scoped usam chaves compostas que incluem `tenant_id`, impedindo referências entre empresas no banco. `users` e `tenants` são globais; detalhes de acesso e autorização continuam dependentes da identidade autenticada e dos casos de uso.
+O primeiro schema cobre tenants, unidades, usuários, memberships, administradores globais da plataforma, pacientes, profissionais, vínculos de cuidado, atendimentos e evoluções. Todos os registros operacionais e clínicos possuem `tenant_id` obrigatório. Relações entre registros scoped usam chaves compostas que incluem `tenant_id`, impedindo referências entre empresas no banco. `users`, `tenants` e `platform_administrators` são globais; um administrador de plataforma não recebe acesso clínico implícito. Detalhes de acesso e autorização continuam dependentes da identidade autenticada e dos casos de uso.
 
 Entidades de domínio não serão entidades anêmicas moldadas pelo EF. Configurações EF Core e demais detalhes de armazenamento permanecem em Infrastructure. Migrações devem ser revisáveis e executadas por processo operacional explícito.
 

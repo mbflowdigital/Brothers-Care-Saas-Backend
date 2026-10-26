@@ -1,4 +1,5 @@
 using BrothersCare.Domain.Care;
+using BrothersCare.Domain.Identity;
 using BrothersCare.Domain.Tenancy;
 using BrothersCare.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -51,6 +52,23 @@ public sealed class TenantSchemaTests
         AssertTenantScopedForeignKey<ClinicalRecord, Appointment>(context);
         AssertTenantScopedForeignKey<ClinicalRecord, Patient>(context);
         AssertTenantScopedForeignKey<ClinicalRecord, TenantMembership>(context);
+    }
+
+    [Fact]
+    public void PlatformAdministratorIsGlobalAndHasOneUser()
+    {
+        using var context = CreateContext();
+
+        var administrator = context.Model.FindEntityType(typeof(PlatformAdministrator));
+        Assert.NotNull(administrator);
+        Assert.Null(administrator.FindProperty("TenantId"));
+        Assert.Contains(
+            administrator.GetIndexes(),
+            index => index.IsUnique && index.Properties.Select(property => property.Name).SequenceEqual(["UserId"]));
+        Assert.Contains(
+            administrator.GetForeignKeys(),
+            foreignKey => foreignKey.PrincipalEntityType.ClrType == typeof(User) &&
+                          foreignKey.Properties.Select(property => property.Name).SequenceEqual(["UserId"]));
     }
 
     private static BrothersCareDbContext CreateContext()
