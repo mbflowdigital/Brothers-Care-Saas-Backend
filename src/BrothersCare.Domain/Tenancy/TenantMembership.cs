@@ -35,7 +35,7 @@ public sealed class TenantMembership
 
     public void ChangeRole(TenantMembershipRole role) => Role = role;
 
-    public void Deactivate() => Status = MembershipStatus.Inactive;
+    public void Deactivate() => Status = MembershipStatus.Revoked;
 
     public void Activate() => Status = MembershipStatus.Active;
 }
@@ -50,5 +50,7 @@ public enum TenantMembershipRole
 public enum MembershipStatus
 {
     Active = 1,
-    Inactive = 2,
+    Invited = 3,
+    Suspended = 4,
+    Revoked = 5,
 }

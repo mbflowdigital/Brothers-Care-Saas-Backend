@@ -5,7 +5,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BrothersCare.Infrastructure.Identity;
 
-public sealed class PlatformAdministratorBootstrapper(BrothersCareDbContext dbContext) : IPlatformAdministratorBootstrapper
+public sealed class PlatformAdministratorBootstrapper(
+    BrothersCareDbContext dbContext,
+    TimeProvider timeProvider) : IPlatformAdministratorBootstrapper
 {
     public async Task<PlatformAdministratorBootstrapResult> EnsureSuperAdministratorAsync(
         PlatformAdministratorBootstrapRequest request,
@@ -20,7 +22,7 @@ public sealed class PlatformAdministratorBootstrapper(BrothersCareDbContext dbCo
             item => item.NormalizedEmail == normalizedEmail,
             cancellationToken);
 
-        var now = DateTimeOffset.UtcNow;
+        var now = timeProvider.GetUtcNow();
         if (user is null)
         {
             user = new User(Guid.NewGuid(), request.Email, request.DisplayName, now);
