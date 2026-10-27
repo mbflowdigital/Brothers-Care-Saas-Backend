@@ -38,6 +38,16 @@ public sealed class TenantMembership
     public void Deactivate() => Status = MembershipStatus.Revoked;
 
     public void Activate() => Status = MembershipStatus.Active;
+
+    public void AcceptInvitation()
+    {
+        if (Status is not MembershipStatus.Invited)
+        {
+            throw new InvalidOperationException("Only an invited membership can be accepted.");
+        }
+
+        Status = MembershipStatus.Active;
+    }
 }
 
 public enum TenantMembershipRole

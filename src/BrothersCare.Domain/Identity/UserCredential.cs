@@ -26,6 +26,23 @@ public sealed class UserCredential
     public DateTimeOffset? PasswordChangedAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
+
+    public void Activate(string passwordHash, DateTimeOffset now)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
+
+        if (Status is UserCredentialStatus.Disabled)
+        {
+            throw new InvalidOperationException("A disabled credential cannot be activated.");
+        }
+
+        PasswordHash = passwordHash;
+        Status = UserCredentialStatus.Active;
+        FailedSignInCount = 0;
+        LockoutEndsAt = null;
+        PasswordChangedAt = now;
+        UpdatedAt = now;
+    }
 }
 
 public enum UserCredentialStatus

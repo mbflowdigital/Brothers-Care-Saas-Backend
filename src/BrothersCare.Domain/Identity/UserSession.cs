@@ -36,6 +36,17 @@ public sealed class UserSession
     public DateTimeOffset AbsoluteExpiresAt { get; private set; }
     public DateTimeOffset? RevokedAt { get; private set; }
     public SessionRevocationReason? RevocationReason { get; private set; }
+
+    public void Revoke(DateTimeOffset now, SessionRevocationReason reason)
+    {
+        if (RevokedAt is not null)
+        {
+            return;
+        }
+
+        RevokedAt = now;
+        RevocationReason = reason;
+    }
 }
 
 public enum SessionRevocationReason

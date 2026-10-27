@@ -63,6 +63,19 @@ dotnet run --project src/BrothersCare.Api -- --bootstrap-super-administrator
 
 O comando é idempotente para o mesmo usuário ativo. Ele cria a identidade global e o vínculo `platform_administrators`; não cria senha, token ou sessão. Esses elementos pertencem à futura implementação de autenticação.
 
+## Ativação do superadministrador
+
+Após o bootstrap e a migration de autenticação, emita um token temporário em um terminal confiável. O token é mostrado uma única vez no console, não é registrado pela aplicação e expira em 30 minutos por padrão. Não o inclua em e-mails, logs, tickets ou repositório.
+
+```powershell
+$env:Bootstrap__AccountActivation__Email = "admin@empresa.exemplo"
+$env:Bootstrap__AccountActivation__Confirmation = "issue-account-activation-token"
+$env:Bootstrap__AccountActivation__LifetimeMinutes = "30"
+dotnet run --project src/BrothersCare.Api -- --issue-super-administrator-activation-token
+```
+
+O token é aceito pelo caso de uso de ativação; o endpoint HTTP será disponibilizado na etapa seguinte. Emitir outro token revoga imediatamente os anteriores ainda ativos para o mesmo superadministrador.
+
 ## Projetos
 
 - `src/BrothersCare.Domain`: modelo e regras do domínio, sem infraestrutura.

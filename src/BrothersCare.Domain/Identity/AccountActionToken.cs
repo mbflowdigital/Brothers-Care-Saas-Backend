@@ -42,6 +42,29 @@ public sealed class AccountActionToken
     public DateTimeOffset ExpiresAt { get; private set; }
     public DateTimeOffset? ConsumedAt { get; private set; }
     public DateTimeOffset? RevokedAt { get; private set; }
+
+    public bool IsUsableAt(DateTimeOffset now) =>
+        ConsumedAt is null && RevokedAt is null && ExpiresAt > now;
+
+    public void Consume(DateTimeOffset now)
+    {
+        if (!IsUsableAt(now))
+        {
+            throw new InvalidOperationException("The account action token cannot be consumed.");
+        }
+
+        ConsumedAt = now;
+    }
+
+    public void Revoke(DateTimeOffset now)
+    {
+        if (ConsumedAt is not null)
+        {
+            throw new InvalidOperationException("A consumed account action token cannot be revoked.");
+        }
+
+        RevokedAt ??= now;
+    }
 }
 
 public enum AccountActionTokenPurpose

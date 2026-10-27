@@ -1,5 +1,6 @@
 using BrothersCare.Application;
 using BrothersCare.Application.Identity;
+using BrothersCare.Api.Identity;
 using BrothersCare.Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
@@ -55,6 +56,37 @@ if (args.Contains("--bootstrap-super-administrator", StringComparer.Ordinal))
     return;
 }
 
+if (args.Contains("--issue-super-administrator-activation-token", StringComparer.Ordinal))
+{
+    const string expectedConfirmation = "issue-account-activation-token";
+    var activationConfiguration = app.Configuration.GetSection("Bootstrap:AccountActivation");
+    var confirmation = activationConfiguration["Confirmation"];
+    var email = activationConfiguration["Email"];
+    var lifetimeMinutes = activationConfiguration.GetValue<int?>("LifetimeMinutes") ?? 30;
+
+    if (!string.Equals(confirmation, expectedConfirmation, StringComparison.Ordinal))
+    {
+        throw new InvalidOperationException("Set Bootstrap__AccountActivation__Confirmation before issuing an activation token.");
+    }
+
+    if (string.IsNullOrWhiteSpace(email))
+    {
+        throw new InvalidOperationException("Set the platform administrator email before issuing an activation token.");
+    }
+
+    using var scope = app.Services.CreateScope();
+    var issuer = scope.ServiceProvider.GetService<IPlatformAdministratorActivationTokenIssuer>()
+        ?? throw new InvalidOperationException("Configure ConnectionStrings__BrothersCare before issuing an activation token.");
+    var result = await issuer.IssueAsync(
+        new PlatformAdministratorActivationTokenIssueRequest(email, TimeSpan.FromMinutes(lifetimeMinutes)),
+        CancellationToken.None);
+
+    Console.WriteLine("Activation token (copy now; it will not be shown again):");
+    Console.WriteLine(result.Token);
+    Console.WriteLine($"Expires at: {result.ExpiresAt:O}");
+    return;
+}
+
 app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
@@ -73,6 +105,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("ready"),
 });
+app.MapAuthEndpoints();
 
 app.Run();
 

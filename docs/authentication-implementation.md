@@ -280,6 +280,8 @@ Comportamento:
 
 Quando a finalidade do token for `InvitationAcceptance`, a mesma operação também deve validar a membership `Invited` associada ao convite e movê-la para `Active`. O token não pode ativar membership de outro tenant ou outro usuário.
 
+Implementação atual: a rota está disponível e retorna `204 No Content` quando a ativação é concluída. Para token inválido, expirado, revogado, consumido, senha inválida ou confirmação divergente, retorna o mesmo `400` com Problem Details para não revelar o estado do token. A emissão do token inicial do superadministrador é feita exclusivamente pelo comando administrativo documentado no README; a rota não emite tokens.
+
 ### `POST /api/v1/invitations`
 
 Exige administrador autorizado. A rota pertence ao domínio de identidade e pode permanecer sob `/api/v1/invitations` para representar convites de tenant.

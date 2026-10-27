@@ -23,6 +23,8 @@ public static class DependencyInjection
             services.TryAddSingleton<TimeProvider>(TimeProvider.System);
             services.AddDbContext<BrothersCareDbContext>(options => options.UseSqlServer(connectionString));
             services.AddScoped<IPlatformAdministratorBootstrapper, PlatformAdministratorBootstrapper>();
+            services.AddScoped<IAccountActivationService, AccountActivationService>();
+            services.AddScoped<IPlatformAdministratorActivationTokenIssuer, PlatformAdministratorActivationTokenIssuer>();
         }
 
         return services;
