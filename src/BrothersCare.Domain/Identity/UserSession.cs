@@ -1,3 +1,5 @@
+using BrothersCare.Domain.Tenancy;
+
 namespace BrothersCare.Domain.Identity;
 
 public sealed class UserSession
@@ -36,6 +38,48 @@ public sealed class UserSession
     public DateTimeOffset AbsoluteExpiresAt { get; private set; }
     public DateTimeOffset? RevokedAt { get; private set; }
     public SessionRevocationReason? RevocationReason { get; private set; }
+
+    public bool IsValidAt(DateTimeOffset now) =>
+        RevokedAt is null && now >= CreatedAt && now < IdleExpiresAt && now < AbsoluteExpiresAt;
+
+    public bool TryExpire(DateTimeOffset now)
+    {
+        if (RevokedAt is not null || (now < IdleExpiresAt && now < AbsoluteExpiresAt))
+        {
+            return false;
+        }
+
+        Revoke(now, SessionRevocationReason.Expired);
+        return true;
+    }
+
+    public void SelectActiveTenant(TenantMembership membership, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(membership);
+        if (!IsValidAt(now) || membership.UserId != UserId || membership.Status != MembershipStatus.Active)
+        {
+            throw new InvalidOperationException("A valid session and an active membership belonging to the user are required.");
+        }
+
+        ActiveTenantId = membership.TenantId;
+    }
+
+    public void RegisterActivity(DateTimeOffset now, TimeSpan idleTimeout)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(idleTimeout, TimeSpan.Zero);
+
+        if (!IsValidAt(now))
+        {
+            throw new InvalidOperationException("An invalid session cannot be renewed.");
+        }
+
+        var renewedExpiration = now.Add(idleTimeout);
+        IdleExpiresAt = renewedExpiration < AbsoluteExpiresAt ? renewedExpiration : AbsoluteExpiresAt;
+        if (now - LastSeenAt >= TimeSpan.FromMinutes(5))
+        {
+            LastSeenAt = now;
+        }
+    }
 
     public void Revoke(DateTimeOffset now, SessionRevocationReason reason)
     {

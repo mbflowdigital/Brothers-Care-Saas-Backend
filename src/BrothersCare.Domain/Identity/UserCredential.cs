@@ -27,13 +27,55 @@ public sealed class UserCredential
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    public void UnlockIfExpired(DateTimeOffset now)
+    {
+        if (Status == UserCredentialStatus.Locked && LockoutEndsAt <= now)
+        {
+            Status = UserCredentialStatus.Active;
+            FailedSignInCount = 0;
+            LockoutEndsAt = null;
+            UpdatedAt = now;
+        }
+    }
+
+    public void RegisterFailedSignIn(DateTimeOffset now, int maximumAttempts, TimeSpan lockoutDuration)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumAttempts);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(lockoutDuration, TimeSpan.Zero);
+
+        if (Status != UserCredentialStatus.Active)
+        {
+            throw new InvalidOperationException("Only an active credential can register a sign-in failure.");
+        }
+
+        FailedSignInCount++;
+        UpdatedAt = now;
+        if (FailedSignInCount >= maximumAttempts)
+        {
+            Status = UserCredentialStatus.Locked;
+            LockoutEndsAt = now.Add(lockoutDuration);
+        }
+    }
+
+    public void RegisterSuccessfulSignIn(DateTimeOffset now)
+    {
+        if (Status != UserCredentialStatus.Active)
+        {
+            throw new InvalidOperationException("Only an active credential can sign in.");
+        }
+
+        FailedSignInCount = 0;
+        LockoutEndsAt = null;
+        UpdatedAt = now;
+    }
+
     public void Activate(string passwordHash, DateTimeOffset now)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
 
-        if (Status is UserCredentialStatus.Disabled)
+        if (Status is not UserCredentialStatus.PendingActivation)
         {
-            throw new InvalidOperationException("A disabled credential cannot be activated.");
+            throw new InvalidOperationException("Only a pending credential can be activated. Existing credentials require a dedicated password change or recovery flow.");
         }
 
         PasswordHash = passwordHash;
@@ -42,6 +84,20 @@ public sealed class UserCredential
         LockoutEndsAt = null;
         PasswordChangedAt = now;
         UpdatedAt = now;
+    }
+
+    public void ChangePassword(string passwordHash, DateTimeOffset now)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
+        if (Status != UserCredentialStatus.Active)
+        {
+            throw new InvalidOperationException("Only an active credential can change its password.");
+        }
+
+        PasswordHash = passwordHash;
+        PasswordChangedAt = UpdatedAt = now;
+        FailedSignInCount = 0;
+        LockoutEndsAt = null;
     }
 }
 

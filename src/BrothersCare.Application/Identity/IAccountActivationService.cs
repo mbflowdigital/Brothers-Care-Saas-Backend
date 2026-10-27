@@ -5,7 +5,10 @@ public interface IAccountActivationService
     Task<AccountActivationResult> ActivateAsync(AccountActivationRequest request, CancellationToken cancellationToken);
 }
 
-public sealed record AccountActivationRequest(string Token, string Password, string PasswordConfirmation);
+public sealed record AccountActivationRequest(string Token, string Password, string PasswordConfirmation)
+{
+    public override string ToString() => "[REDACTED]";
+}
 
 public enum AccountActivationResult
 {

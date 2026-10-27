@@ -26,7 +26,7 @@ public sealed class UserCredentialConfiguration : IEntityTypeConfiguration<UserC
         builder.Property(item => item.PasswordChangedAt).HasColumnName("password_changed_at");
         builder.Property(item => item.CreatedAt).HasColumnName("created_at");
         builder.Property(item => item.UpdatedAt).HasColumnName("updated_at");
-        builder.HasOne<User>().WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<User>().WithOne().HasForeignKey<UserCredential>(item => item.UserId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(item => item.UserId).IsUnique();
         builder.HasIndex(item => new { item.Status, item.LockoutEndsAt });
     }

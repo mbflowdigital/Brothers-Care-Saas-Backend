@@ -689,8 +689,8 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("BrothersCare.Domain.Identity.UserCredential", b =>
                 {
                     b.HasOne("BrothersCare.Domain.Identity.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
+                        .WithOne()
+                        .HasForeignKey("BrothersCare.Domain.Identity.UserCredential", "UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

@@ -13,4 +13,7 @@ public sealed record PlatformAdministratorActivationTokenIssueRequest(
 
 public sealed record PlatformAdministratorActivationTokenIssueResult(
     string Token,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt)
+{
+    public override string ToString() => "[REDACTED]";
+}
