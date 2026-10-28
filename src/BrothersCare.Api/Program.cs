@@ -1,13 +1,13 @@
-using BrothersCare.Application;
-using BrothersCare.Application.Identity;
-using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Api.Identity;
 using BrothersCare.Api.Middleware;
 using BrothersCare.Api.Tenancy;
+using BrothersCare.Application;
+using BrothersCare.Application.Identity;
+using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Infrastructure;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 var isAdministrativeCommand = args.Contains("--bootstrap-super-administrator", StringComparer.Ordinal) ||
