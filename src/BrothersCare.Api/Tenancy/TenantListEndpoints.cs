@@ -11,7 +11,10 @@ public static class TenantListEndpoints
         endpoints.MapGet("/api/v1/tenants", async ([FromQuery] string? search, [FromServices] ListTenants listTenants, CancellationToken ct) =>
         {
             return Results.Ok(await listTenants.ExecuteAsync(search, ct));
-        }).RequireAuthorization(IdentityPolicies.SuperAdministrator);
+        }).RequireAuthorization(IdentityPolicies.SuperAdministrator)
+            .WithTags("Empresas")
+            .WithName("ListTenants")
+            .WithSummary("Lista as empresas cadastradas na plataforma.");
         return endpoints;
     }
 }

@@ -5,7 +5,7 @@ public interface ITenantListStore
     Task<IReadOnlyList<TenantListItem>> ListAsync(string? search, CancellationToken cancellationToken);
 }
 
-public sealed record TenantListItem(Guid Id, string Name, string Status);
+public sealed record TenantListItem(Guid Id, string Name, string Status, string FirstAdministratorStatus);
 
 public sealed class ListTenants(ITenantListStore store)
 {
