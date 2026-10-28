@@ -63,6 +63,19 @@ dotnet run --project src/BrothersCare.Api -- --bootstrap-super-administrator
 
 O comando é idempotente para o mesmo usuário ativo. Ele cria a identidade global e o vínculo `platform_administrators`; não cria senha, token ou sessão. Esses elementos pertencem à futura implementação de autenticação.
 
+## Ativação do superadministrador
+
+Após o bootstrap e a migration de autenticação, emita um token temporário em um terminal confiável. O token é mostrado uma única vez no console, não é registrado pela aplicação e expira em 30 minutos por padrão. Não o inclua em e-mails, logs, tickets ou repositório.
+
+```powershell
+$env:Bootstrap__AccountActivation__Email = "admin@empresa.exemplo"
+$env:Bootstrap__AccountActivation__Confirmation = "issue-account-activation-token"
+$env:Bootstrap__AccountActivation__LifetimeMinutes = "30"
+dotnet run --project src/BrothersCare.Api -- --issue-super-administrator-activation-token
+```
+
+O token é aceito pelo caso de uso de ativação; o endpoint HTTP será disponibilizado na etapa seguinte. Emitir outro token revoga imediatamente os anteriores ainda ativos para o mesmo superadministrador.
+
 ## Projetos
 
 - `src/BrothersCare.Domain`: modelo e regras do domínio, sem infraestrutura.
@@ -81,6 +94,24 @@ A proposta de regras e transições de estado para pacientes, profissionais, age
 As convenções propostas para OpenAPI, contratos HTTP, paginação, filtros, datas, valores monetários e erros estão em [docs/http-api-contracts.md](docs/http-api-contracts.md).
 
 A especificação completa para login, sessão, expiração, logout, ativação e recuperação de acesso está em [docs/authentication-implementation.md](docs/authentication-implementation.md).
+
+## E-mail transacional
+
+Convites e recuperação de senha só são enviados quando `Email:Smtp:Enabled` estiver habilitado e toda a configuração SMTP estiver presente. Configure os segredos pelo ambiente ou user secrets; nunca os versione.
+
+```powershell
+$env:Email__Smtp__Enabled = "true"
+$env:Email__Smtp__Host = "mail5015.site4now.net"
+$env:Email__Smtp__Port = "587"
+$env:Email__Smtp__UserName = "noreply@brothersdigital.tec.br"
+$env:Email__Smtp__Password = "senha-da-caixa"
+$env:Email__Smtp__FromAddress = "noreply@brothersdigital.tec.br"
+$env:Email__Smtp__FromName = "Brothers Care"
+$env:Email__Links__ActivationUrl = "https://app.seu-dominio.com/ativar-conta"
+$env:Email__Links__PasswordRecoveryUrl = "https://app.seu-dominio.com/recuperar-senha"
+```
+
+O adaptador usa SMTP com TLS. Para o serviço MyASP, use a porta 587 e o host seguro informado no painel. As URLs devem apontar para telas do frontend que recebem o parâmetro `token` e chamam os endpoints de ativação ou recuperação.
 
 ## Dependências adicionais
 

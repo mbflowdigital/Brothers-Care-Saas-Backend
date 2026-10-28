@@ -1,11 +1,12 @@
-using BrothersCare.Application.Identity;
+using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Domain.Identity;
-using BrothersCare.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
 
-namespace BrothersCare.Infrastructure.Identity;
+namespace BrothersCare.Application.Identity;
 
-public sealed class PlatformAdministratorBootstrapper(BrothersCareDbContext dbContext) : IPlatformAdministratorBootstrapper
+public sealed class PlatformAdministratorBootstrapper(
+    IPlatformAdministratorStore store,
+    TimeProvider timeProvider,
+    IAuthenticationAudit audit) : IPlatformAdministratorBootstrapper
 {
     public async Task<PlatformAdministratorBootstrapResult> EnsureSuperAdministratorAsync(
         PlatformAdministratorBootstrapRequest request,
@@ -16,20 +17,18 @@ public sealed class PlatformAdministratorBootstrapper(BrothersCareDbContext dbCo
         ArgumentException.ThrowIfNullOrWhiteSpace(request.DisplayName);
 
         var normalizedEmail = request.Email.Trim().ToUpperInvariant();
-        var user = await dbContext.Users.SingleOrDefaultAsync(
-            item => item.NormalizedEmail == normalizedEmail,
-            cancellationToken);
+        await using var transaction = await store.BeginAsync(cancellationToken);
+        var user = await transaction.FindUserAsync(normalizedEmail, cancellationToken);
 
-        var now = DateTimeOffset.UtcNow;
+        var now = timeProvider.GetUtcNow();
         if (user is null)
         {
             user = new User(Guid.NewGuid(), request.Email, request.DisplayName, now);
-            dbContext.Users.Add(user);
+            transaction.AddUser(user);
+            transaction.AddCredential(new UserCredential(Guid.NewGuid(), user.Id, now));
         }
 
-        var existingAdministrator = await dbContext.PlatformAdministrators.SingleOrDefaultAsync(
-            item => item.UserId == user.Id,
-            cancellationToken);
+        var existingAdministrator = await transaction.FindAdministratorAsync(user.Id, cancellationToken);
 
         if (existingAdministrator is not null)
         {
@@ -38,17 +37,19 @@ public sealed class PlatformAdministratorBootstrapper(BrothersCareDbContext dbCo
                 throw new InvalidOperationException("The platform administrator is inactive and must be reactivated through an audited workflow.");
             }
 
+            await transaction.CommitAsync(cancellationToken);
             return new PlatformAdministratorBootstrapResult(false);
         }
 
-        dbContext.PlatformAdministrators.Add(
+        transaction.AddAdministrator(
             new PlatformAdministrator(
                 Guid.NewGuid(),
                 user.Id,
                 PlatformAdministratorRole.SuperAdministrator,
                 now));
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        audit.Record(AuthenticationAuditEvent.PlatformAdministratorCreated, now);
         return new PlatformAdministratorBootstrapResult(true);
     }
 }

@@ -71,6 +71,19 @@ public sealed class TenantSchemaTests
                           foreignKey.Properties.Select(property => property.Name).SequenceEqual(["UserId"]));
     }
 
+    [Fact]
+    public void UserCredentialHasGlobalOneToOneRelationshipWithUser()
+    {
+        using var context = CreateContext();
+        var credential = context.Model.FindEntityType(typeof(UserCredential));
+        Assert.NotNull(credential);
+        Assert.Null(credential.FindProperty("TenantId"));
+        var relationship = Assert.Single(credential.GetForeignKeys(), key => key.PrincipalEntityType.ClrType == typeof(User));
+        Assert.True(relationship.IsUnique);
+        Assert.True(relationship.IsRequired);
+        Assert.Equal(["UserId"], relationship.Properties.Select(property => property.Name));
+    }
+
     private static BrothersCareDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<BrothersCareDbContext>()

@@ -27,10 +27,15 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
 
     public DbSet<TenantMembership> TenantMemberships => Set<TenantMembership>();
 
+    public DbSet<UserCredential> UserCredentials => Set<UserCredential>();
+    public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<AccountActionToken> AccountActionTokens => Set<AccountActionToken>();
+
     public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(BrothersCareDbContext).Assembly);
         ConfigureUser(modelBuilder);
         ConfigurePlatformAdministrator(modelBuilder);
         ConfigureTenant(modelBuilder);
@@ -100,6 +105,7 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
     {
         var entity = modelBuilder.Entity<TenantMembership>();
         entity.ToTable("tenant_memberships");
+        entity.HasAlternateKey(item => new { item.Id, item.UserId });
         ConfigureTenantScopedKey(entity);
         entity.Property(item => item.Role).HasConversion<int>().IsRequired();
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
