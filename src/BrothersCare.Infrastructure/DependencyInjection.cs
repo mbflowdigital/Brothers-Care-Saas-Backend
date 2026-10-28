@@ -60,6 +60,8 @@ public static class DependencyInjection
                 provider.GetService<IPasswordRecoverySender>()));
             services.TryAddSingleton<ITokenGenerator, InvitationTokenService>();
             services.AddScoped<ITenantProvisioningStore, SqlTenantProvisioningStore>();
+            services.AddScoped<ITenantListStore, SqlTenantListStore>();
+            services.AddScoped<ListTenants>();
             services.AddScoped<ITenantInvitationStore, SqlTenantInvitationStore>();
             services.AddScoped<ITenantInvitationPlanUsageStore, SqlTenantInvitationPlanUsageStore>();
             services.TryAddSingleton(new ProvisionalInvitationPlanSettings(
