@@ -10,13 +10,15 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
+var isAdministrativeCommand = args.Contains("--bootstrap-super-administrator", StringComparer.Ordinal) ||
+    args.Contains("--issue-super-administrator-activation-token", StringComparer.Ordinal);
 
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration, configureEmail: !isAdministrativeCommand);
 builder.Services.AddSingleton<SessionCookie>();
 builder.Services.AddSingleton<LoginRateLimiter>();
 builder.Services.AddSingleton<AccountActionRateLimiter>();
@@ -150,6 +152,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 }).AllowAnonymous();
 app.MapAuthEndpoints();
 app.MapTenantEndpoints();
+app.MapTenantListEndpoints();
 app.MapInvitationEndpoints();
 
 app.Run();

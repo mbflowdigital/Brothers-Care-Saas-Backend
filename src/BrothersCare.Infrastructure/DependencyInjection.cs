@@ -8,6 +8,7 @@ using BrothersCare.Application.Identity.PasswordRecovery;
 using BrothersCare.Application.Identity.Sessions;
 using BrothersCare.Application.Tenancy;
 using BrothersCare.Application.Tenancy.Contracts;
+using BrothersCare.Infrastructure.Email;
 using BrothersCare.Infrastructure.Identity;
 using BrothersCare.Infrastructure.Persistence;
 using BrothersCare.Infrastructure.Persistence.Repositories;
@@ -22,11 +23,16 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        bool configureEmail = true)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
         services.TryAddSingleton<IAuthenticationAudit, AuthenticationAudit>();
+        if (configureEmail)
+        {
+            ConfigureEmail(services, configuration);
+        }
 
         var connectionString = configuration.GetConnectionString("BrothersCare");
         if (!string.IsNullOrWhiteSpace(connectionString))
@@ -85,5 +91,45 @@ public static class DependencyInjection
         }
 
         return services;
+    }
+
+    private static void ConfigureEmail(IServiceCollection services, IConfiguration configuration)
+    {
+        var section = configuration.GetSection("Email:Smtp");
+        if (!section.GetValue("Enabled", false))
+        {
+            return;
+        }
+
+        var host = section["Host"];
+        var userName = section["UserName"];
+        var password = section["Password"];
+        var fromAddress = section["FromAddress"];
+        var fromName = section["FromName"];
+        var port = section.GetValue<int?>("Port") ?? 587;
+        var activationUrl = configuration["Email:Links:ActivationUrl"];
+        var passwordRecoveryUrl = configuration["Email:Links:PasswordRecoveryUrl"];
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(host)) errors.Add("Email:Smtp:Host");
+        if (string.IsNullOrWhiteSpace(userName)) errors.Add("Email:Smtp:UserName");
+        if (string.IsNullOrWhiteSpace(password)) errors.Add("Email:Smtp:Password");
+        if (string.IsNullOrWhiteSpace(fromAddress)) errors.Add("Email:Smtp:FromAddress");
+        if (string.IsNullOrWhiteSpace(fromName)) errors.Add("Email:Smtp:FromName");
+        if (port is < 1 or > 65535) errors.Add("Email:Smtp:Port");
+        if (!Uri.TryCreate(activationUrl, UriKind.Absolute, out var activationUri) ||
+            activationUri.Scheme is not ("https" or "http")) errors.Add("Email:Links:ActivationUrl");
+        if (!Uri.TryCreate(passwordRecoveryUrl, UriKind.Absolute, out var recoveryUri) ||
+            recoveryUri.Scheme is not ("https" or "http")) errors.Add("Email:Links:PasswordRecoveryUrl");
+
+        if (errors.Count > 0)
+        {
+            throw new InvalidOperationException($"Email SMTP is enabled but these settings are invalid or missing: {string.Join(", ", errors)}.");
+        }
+
+        services.AddSingleton(new SmtpEmailSettings(
+            host!, port, userName!, password!, fromAddress!, fromName!, activationUri!, recoveryUri!));
+        services.AddScoped<SmtpEmailSender>();
+        services.AddScoped<IInvitationSender>(provider => provider.GetRequiredService<SmtpEmailSender>());
+        services.AddScoped<IPasswordRecoverySender>(provider => provider.GetRequiredService<SmtpEmailSender>());
     }
 }

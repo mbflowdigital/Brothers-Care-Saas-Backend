@@ -95,6 +95,24 @@ As convenções propostas para OpenAPI, contratos HTTP, paginação, filtros, da
 
 A especificação completa para login, sessão, expiração, logout, ativação e recuperação de acesso está em [docs/authentication-implementation.md](docs/authentication-implementation.md).
 
+## E-mail transacional
+
+Convites e recuperação de senha só são enviados quando `Email:Smtp:Enabled` estiver habilitado e toda a configuração SMTP estiver presente. Configure os segredos pelo ambiente ou user secrets; nunca os versione.
+
+```powershell
+$env:Email__Smtp__Enabled = "true"
+$env:Email__Smtp__Host = "mail5015.site4now.net"
+$env:Email__Smtp__Port = "587"
+$env:Email__Smtp__UserName = "noreply@brothersdigital.tec.br"
+$env:Email__Smtp__Password = "senha-da-caixa"
+$env:Email__Smtp__FromAddress = "noreply@brothersdigital.tec.br"
+$env:Email__Smtp__FromName = "Brothers Care"
+$env:Email__Links__ActivationUrl = "https://app.seu-dominio.com/ativar-conta"
+$env:Email__Links__PasswordRecoveryUrl = "https://app.seu-dominio.com/recuperar-senha"
+```
+
+O adaptador usa SMTP com TLS. Para o serviço MyASP, use a porta 587 e o host seguro informado no painel. As URLs devem apontar para telas do frontend que recebem o parâmetro `token` e chamam os endpoints de ativação ou recuperação.
+
 ## Dependências adicionais
 
 `Swashbuckle.AspNetCore` publica o documento e a UI Swagger apenas em desenvolvimento. `Microsoft.AspNetCore.Mvc.Testing` hospeda a API em memória nos testes de integração. xUnit e Microsoft.NET.Test.Sdk formam a infraestrutura mínima de testes. Não foi adicionada biblioteca de arquitetura: os testes usam reflexão do próprio .NET.
