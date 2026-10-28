@@ -95,6 +95,8 @@ As convenções propostas para OpenAPI, contratos HTTP, paginação, filtros, da
 
 A especificação completa para login, sessão, expiração, logout, ativação e recuperação de acesso está em [docs/authentication-implementation.md](docs/authentication-implementation.md).
 
+As decisões aprovadas para empresas, unidades, identificação por CPF/CNPJ, convites, seleção de empresa e acesso a dados clínicos estão em [docs/tenant-unit-access-rules.md](docs/tenant-unit-access-rules.md). Consulte este documento antes de implementar ou alterar qualquer fluxo desses contextos.
+
 ## E-mail transacional
 
 Convites e recuperação de senha só são enviados quando `Email:Smtp:Enabled` estiver habilitado e toda a configuração SMTP estiver presente. Configure os segredos pelo ambiente ou user secrets; nunca os versione.
