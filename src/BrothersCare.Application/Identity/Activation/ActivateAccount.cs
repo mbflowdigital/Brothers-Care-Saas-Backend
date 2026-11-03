@@ -60,6 +60,22 @@ public sealed class ActivateAccount(
             return AccountActivationResult.InvalidToken;
         }
 
+        if (!TryApplyCpf(user, request.Cpf, out var cpf))
+        {
+            return AccountActivationResult.InvalidCpf;
+        }
+
+        if (cpf is not null)
+        {
+            var userWithCpf = await transaction.FindUserByCpfAsync(cpf, cancellationToken);
+            if (userWithCpf is not null && userWithCpf.Id != user.Id)
+            {
+                return AccountActivationResult.InvalidCpf;
+            }
+
+            user.SetCpf(cpf);
+        }
+
         var credential = await transaction.FindCredentialAsync(user.Id, cancellationToken);
         if (credential?.Status is UserCredentialStatus.Disabled or UserCredentialStatus.Locked)
         {
@@ -104,5 +120,24 @@ public sealed class ActivateAccount(
         token.Consume(now);
         await transaction.CommitAsync(cancellationToken);
         return AccountActivationResult.Activated;
+    }
+
+    private static bool TryApplyCpf(User user, string? cpf, out string? normalizedCpf)
+    {
+        normalizedCpf = null;
+        if (string.IsNullOrWhiteSpace(cpf))
+        {
+            return user.Cpf is not null;
+        }
+
+        try
+        {
+            normalizedCpf = User.NormalizeCpf(cpf);
+            return user.Cpf is null || user.Cpf == normalizedCpf;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 }

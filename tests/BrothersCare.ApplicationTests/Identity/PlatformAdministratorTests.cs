@@ -98,9 +98,9 @@ public sealed class PlatformAdministratorTests
         var issued = await new PlatformAdministratorActivationTokenIssuer(scenario.Store, scenario.Clock, scenario.Tokens).IssueAsync(
             new PlatformAdministratorActivationTokenIssueRequest("global@example.invalid", TimeSpan.FromMinutes(30)), CancellationToken.None);
         Assert.Equal(AccountActivationResult.Activated, await new ActivateAccount(scenario.Store, scenario.Hasher, scenario.Tokens, scenario.Clock)
-            .ActivateAsync(new AccountActivationRequest(issued.Token, "TestPassword123", "TestPassword123"), CancellationToken.None));
+            .ActivateAsync(new AccountActivationRequest(issued.Token, "TestPassword123", "TestPassword123", "00000000191"), CancellationToken.None));
         var login = await new LoginUser(scenario.Store, scenario.Hasher, scenario.Tokens, scenario.Clock, scenario.Settings, scenario)
-            .ExecuteAsync(new LoginCommand("global@example.invalid", "TestPassword123"), CancellationToken.None);
+            .ExecuteAsync(new LoginCommand("00000000191", "TestPassword123"), CancellationToken.None);
         Assert.Equal(LoginStatus.Succeeded, login.Status);
         Assert.NotNull(login.Session);
         Assert.Equal("SuperAdministrator", login.Session.PlatformAdministrator?.Role);

@@ -10,19 +10,19 @@ namespace BrothersCare.ApplicationTests.Identity;
 public sealed class LoginAndSessionTests
 {
     [Fact]
-    public async Task LoginNormalizesEmailCreatesIndependentSessionsAndResetsFailures()
+    public async Task LoginNormalizesCpfCreatesIndependentSessionsAndResetsFailures()
     {
         var scenario = new IdentityScenario();
-        scenario.AddUser();
+        var user = scenario.AddUser();
         var credential = Assert.Single(scenario.Store.Credentials);
         credential.RegisterFailedSignIn(scenario.Clock.GetUtcNow(), 5, TimeSpan.FromMinutes(15));
         var login = Login(scenario);
-        var first = await login.ExecuteAsync(new LoginCommand(" USER@EXAMPLE.INVALID ", "TestPassword123"), CancellationToken.None);
-        var second = await login.ExecuteAsync(new LoginCommand("user@example.invalid", "TestPassword123"), CancellationToken.None);
+        var first = await login.ExecuteAsync(new LoginCommand("000.000.001-91", "TestPassword123"), CancellationToken.None);
+        var second = await login.ExecuteAsync(new LoginCommand(user.Cpf!, "TestPassword123"), CancellationToken.None);
 
         Assert.Equal(LoginStatus.Succeeded, first.Status);
         Assert.Equal(LoginStatus.Succeeded, second.Status);
-        Assert.Equal("USER@EXAMPLE.INVALID", scenario.Store.LastNormalizedEmail);
+        Assert.Equal(user.Cpf, scenario.Store.LastCpf);
         Assert.Equal(0, credential.FailedSignInCount);
         Assert.Equal(2, scenario.Store.Sessions.Count);
         Assert.NotEqual(first.CookieValue, second.CookieValue);
@@ -41,10 +41,10 @@ public sealed class LoginAndSessionTests
     public async Task UnknownUserAndIncorrectPasswordReturnSameFailureWithoutIssuingSession()
     {
         var scenario = new IdentityScenario();
-        scenario.AddUser();
+        var user = scenario.AddUser();
         var login = Login(scenario);
-        var known = await login.ExecuteAsync(new LoginCommand("user@example.invalid", "wrong-password"), CancellationToken.None);
-        var unknown = await login.ExecuteAsync(new LoginCommand("unknown@example.invalid", "wrong-password"), CancellationToken.None);
+        var known = await login.ExecuteAsync(new LoginCommand(user.Cpf!, "wrong-password"), CancellationToken.None);
+        var unknown = await login.ExecuteAsync(new LoginCommand("00000000272", "wrong-password"), CancellationToken.None);
         Assert.Equal(known.Status, unknown.Status);
         Assert.Null(known.Session);
         Assert.Null(unknown.Session);
@@ -62,7 +62,7 @@ public sealed class LoginAndSessionTests
     {
         var scenario = new IdentityScenario();
         scenario.AddUser(active: false);
-        var result = await Login(scenario).ExecuteAsync(new LoginCommand("user@example.invalid", "TestPassword123"), CancellationToken.None);
+        var result = await Login(scenario).ExecuteAsync(new LoginCommand("00000000191", "TestPassword123"), CancellationToken.None);
         Assert.Equal(LoginStatus.InvalidCredentials, result.Status);
         Assert.Equal(0, Assert.Single(scenario.Store.Credentials).FailedSignInCount);
         Assert.Equal(0, scenario.Store.Commits);
@@ -70,15 +70,15 @@ public sealed class LoginAndSessionTests
     }
 
     [Theory]
-    [InlineData("invalid-email", "password")]
-    [InlineData("user@example.invalid", "")]
+    [InlineData("invalid-cpf", "password")]
+    [InlineData("52998224725", "")]
     [InlineData("", "password")]
-    public async Task InvalidLoginInputDoesNotAccessStore(string email, string password)
+    public async Task InvalidLoginInputDoesNotAccessStore(string cpf, string password)
     {
         var scenario = new IdentityScenario();
-        var result = await Login(scenario).ExecuteAsync(new LoginCommand(email, password), CancellationToken.None);
+        var result = await Login(scenario).ExecuteAsync(new LoginCommand(cpf, password), CancellationToken.None);
         Assert.Equal(LoginStatus.InvalidInput, result.Status);
-        Assert.Null(scenario.Store.LastNormalizedEmail);
+        Assert.Null(scenario.Store.LastCpf);
         Assert.Empty(scenario.Store.Sessions);
     }
 
@@ -91,14 +91,14 @@ public sealed class LoginAndSessionTests
         scenario.SignIn(user);
         var settings = new AuthenticationSettings(maximumFailedAttempts: 2, lockoutMinutes: 3);
         var login = new LoginUser(scenario.Store, scenario.Hasher, scenario.Tokens, scenario.Clock, settings, scenario);
-        await login.ExecuteAsync(new LoginCommand(user.Email, "wrong-password"), CancellationToken.None);
+        await login.ExecuteAsync(new LoginCommand(user.Cpf!, "wrong-password"), CancellationToken.None);
         Assert.All(scenario.Store.Sessions, session => Assert.Null(session.RevokedAt));
-        await login.ExecuteAsync(new LoginCommand(user.Email, "wrong-password"), CancellationToken.None);
+        await login.ExecuteAsync(new LoginCommand(user.Cpf!, "wrong-password"), CancellationToken.None);
         Assert.All(scenario.Store.Sessions, session => Assert.Equal(SessionRevocationReason.SecurityIncident, session.RevocationReason));
         Assert.Contains(AuthenticationAuditEvent.AccountLocked, scenario.Events);
-        Assert.Equal(LoginStatus.InvalidCredentials, (await login.ExecuteAsync(new LoginCommand(user.Email, "TestPassword123"), CancellationToken.None)).Status);
+        Assert.Equal(LoginStatus.InvalidCredentials, (await login.ExecuteAsync(new LoginCommand(user.Cpf!, "TestPassword123"), CancellationToken.None)).Status);
         scenario.Clock.Advance(TimeSpan.FromMinutes(3));
-        Assert.Equal(LoginStatus.Succeeded, (await login.ExecuteAsync(new LoginCommand(user.Email, "TestPassword123"), CancellationToken.None)).Status);
+        Assert.Equal(LoginStatus.Succeeded, (await login.ExecuteAsync(new LoginCommand(user.Cpf!, "TestPassword123"), CancellationToken.None)).Status);
         Assert.Equal(0, Assert.Single(scenario.Store.Credentials).FailedSignInCount);
     }
 

@@ -25,6 +25,9 @@ public sealed class SqlAccountActivationStore(BrothersCareDbContext dbContext) :
         public Task<User?> FindUserAsync(Guid userId, CancellationToken cancellationToken) =>
             context.Users.SingleOrDefaultAsync(item => item.Id == userId, cancellationToken);
 
+        public Task<User?> FindUserByCpfAsync(string cpf, CancellationToken cancellationToken) =>
+            context.Users.SingleOrDefaultAsync(item => item.Cpf == cpf, cancellationToken);
+
         public Task<UserCredential?> FindCredentialAsync(Guid userId, CancellationToken cancellationToken) =>
             context.UserCredentials.SingleOrDefaultAsync(
                 item => item.UserId == userId,

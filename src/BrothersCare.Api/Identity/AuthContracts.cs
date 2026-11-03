@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace BrothersCare.Api.Identity;
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record LoginHttpRequest(string? Email, string? Password)
+public sealed record LoginHttpRequest(string? Cpf, string? Password)
 {
     public override string ToString() => "[REDACTED]";
 }

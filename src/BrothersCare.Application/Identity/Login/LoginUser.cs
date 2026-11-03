@@ -1,4 +1,3 @@
-using System.Net.Mail;
 using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Domain.Identity;
 
@@ -15,16 +14,23 @@ public sealed class LoginUser(
     public async Task<LoginResult> ExecuteAsync(LoginCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
-        if (string.IsNullOrWhiteSpace(command.Email) || command.Email.Length > 320 ||
-            string.IsNullOrEmpty(command.Password) || command.Password.Length > 128 ||
-            !MailAddress.TryCreate(command.Email.Trim(), out var address) ||
-            !string.Equals(address.Address, command.Email.Trim(), StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(command.Password) || command.Password.Length > 128)
+        {
+            return new(LoginStatus.InvalidInput);
+        }
+
+        string cpf;
+        try
+        {
+            cpf = User.NormalizeCpf(command.Cpf);
+        }
+        catch (ArgumentException)
         {
             return new(LoginStatus.InvalidInput);
         }
 
         await using var transaction = await store.BeginAsync(cancellationToken);
-        var user = await transaction.FindUserAsync(command.Email.Trim().ToUpperInvariant(), cancellationToken);
+        var user = await transaction.FindUserByCpfAsync(cpf, cancellationToken);
         var credential = user is null ? null : await transaction.FindCredentialAsync(user.Id, cancellationToken);
         var now = timeProvider.GetUtcNow();
         credential?.UnlockIfExpired(now);

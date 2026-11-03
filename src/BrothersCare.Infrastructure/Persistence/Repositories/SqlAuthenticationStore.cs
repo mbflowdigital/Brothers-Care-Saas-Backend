@@ -18,8 +18,8 @@ public sealed class SqlAuthenticationStore(BrothersCareDbContext dbContext) : IA
         BrothersCareDbContext context,
         IDbContextTransaction transaction) : IAuthenticationTransaction
     {
-        public Task<User?> FindUserAsync(string normalizedEmail, CancellationToken cancellationToken) =>
-            context.Users.AsNoTracking().SingleOrDefaultAsync(item => item.NormalizedEmail == normalizedEmail, cancellationToken);
+        public Task<User?> FindUserByCpfAsync(string cpf, CancellationToken cancellationToken) =>
+            context.Users.AsNoTracking().SingleOrDefaultAsync(item => item.Cpf == cpf, cancellationToken);
 
         public Task<User?> FindUserByIdAsync(Guid userId, CancellationToken cancellationToken) =>
             context.Users.AsNoTracking().SingleOrDefaultAsync(item => item.Id == userId, cancellationToken);

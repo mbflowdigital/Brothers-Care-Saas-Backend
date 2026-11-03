@@ -27,6 +27,7 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     public List<ClinicUnitMembership> UnitMemberships { get; } = [];
     public int Commits { get; private set; }
     public string? LastNormalizedEmail { get; private set; }
+    public string? LastCpf { get; private set; }
 
     Task<IAuthenticationTransaction> IAuthenticationStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<IAuthenticationTransaction>(this);
     Task<IAccountActivationTransaction> IAccountActivationStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<IAccountActivationTransaction>(this);
@@ -41,6 +42,12 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     {
         LastNormalizedEmail = normalizedEmail;
         return Task.FromResult(Users.SingleOrDefault(item => item.NormalizedEmail == normalizedEmail));
+    }
+
+    public Task<User?> FindUserByCpfAsync(string cpf, CancellationToken cancellationToken)
+    {
+        LastCpf = cpf;
+        return Task.FromResult(Users.SingleOrDefault(item => item.Cpf == cpf));
     }
 
     public Task<User?> FindUserAsync(Guid userId, CancellationToken cancellationToken) => FindUserByIdAsync(userId, cancellationToken);

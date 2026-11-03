@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Globalization;
 using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Application.Identity.Sessions;
 using BrothersCare.Domain.Identity;
@@ -8,6 +9,7 @@ namespace BrothersCare.ApplicationTests.Support;
 
 internal sealed class IdentityScenario : ICurrentPrincipalAccessor, IAuthenticationAudit, IInvitationSender, IPasswordRecoverySender
 {
+    private int cpfSequence;
     public IdentityMemoryStore Store { get; } = new();
     public TestClock Clock { get; } = new();
     public TestPasswordHasher Hasher { get; } = new();
@@ -21,6 +23,7 @@ internal sealed class IdentityScenario : ICurrentPrincipalAccessor, IAuthenticat
     public User AddUser(bool active = true, string email = "user@example.invalid")
     {
         var user = new User(Guid.NewGuid(), email, "Pessoa de teste", Clock.GetUtcNow());
+        user.SetCpf(CreateCpf(++cpfSequence));
         var credential = new UserCredential(Guid.NewGuid(), user.Id, Clock.GetUtcNow());
         if (active)
         {
@@ -29,6 +32,21 @@ internal sealed class IdentityScenario : ICurrentPrincipalAccessor, IAuthenticat
         Store.Users.Add(user);
         Store.Credentials.Add(credential);
         return user;
+    }
+
+    private static string CreateCpf(int sequence)
+    {
+        var prefix = sequence.ToString("D9", CultureInfo.InvariantCulture);
+        var first = CalculateDigit(prefix, 10);
+        var second = CalculateDigit(prefix + first, 11);
+        return prefix + first + second;
+    }
+
+    private static char CalculateDigit(string value, int initialWeight)
+    {
+        var sum = value.Select((digit, index) => (digit - '0') * (initialWeight - index)).Sum();
+        var remainder = sum % 11;
+        return remainder < 2 ? '0' : (char)('0' + 11 - remainder);
     }
 
     public string SignIn(User user, TenantMembership? membership = null)

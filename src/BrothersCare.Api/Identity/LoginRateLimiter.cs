@@ -5,18 +5,18 @@ namespace BrothersCare.Api.Identity;
 public sealed class LoginRateLimiter : IDisposable
 {
     private readonly PartitionedRateLimiter<string> ipLimiter;
-    private readonly PartitionedRateLimiter<string> emailLimiter;
+    private readonly PartitionedRateLimiter<string> cpfLimiter;
 
     public LoginRateLimiter(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ipLimiter = Create(configuration.GetValue("Authentication:LoginRateLimit:IpLimit", 10),
             configuration.GetValue("Authentication:LoginRateLimit:IpWindowMinutes", 10));
-        emailLimiter = Create(configuration.GetValue("Authentication:LoginRateLimit:EmailLimit", 5),
-            configuration.GetValue("Authentication:LoginRateLimit:EmailWindowMinutes", 15));
+        cpfLimiter = Create(configuration.GetValue("Authentication:LoginRateLimit:CpfLimit", 5),
+            configuration.GetValue("Authentication:LoginRateLimit:CpfWindowMinutes", 15));
     }
 
-    public int? GetRetryAfterSeconds(string ipAddress, string normalizedEmail)
+    public int? GetRetryAfterSeconds(string ipAddress, string cpf)
     {
         using var ipLease = ipLimiter.AttemptAcquire(ipAddress);
         if (!ipLease.IsAcquired)
@@ -24,14 +24,14 @@ public sealed class LoginRateLimiter : IDisposable
             return GetRetryAfter(ipLease);
         }
 
-        using var emailLease = emailLimiter.AttemptAcquire(normalizedEmail);
-        return emailLease.IsAcquired ? null : GetRetryAfter(emailLease);
+        using var cpfLease = cpfLimiter.AttemptAcquire(cpf);
+        return cpfLease.IsAcquired ? null : GetRetryAfter(cpfLease);
     }
 
     public void Dispose()
     {
         ipLimiter.Dispose();
-        emailLimiter.Dispose();
+        cpfLimiter.Dispose();
         GC.SuppressFinalize(this);
     }
 

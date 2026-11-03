@@ -58,10 +58,11 @@ public static class AuthEndpoints
                 "Origem da solicitação não permitida.", "forbidden");
         }
 
-        var email = request?.Email;
+        var cpf = request?.Cpf;
+        var rateLimitKey = NormalizeCpfForRateLimit(cpf);
         var retryAfter = rateLimiter.GetRetryAfterSeconds(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            email is { Length: <= 320 } ? email.Trim().ToUpperInvariant() : "invalid");
+            rateLimitKey);
         if (retryAfter is { } seconds)
         {
             context.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
@@ -69,24 +70,24 @@ public static class AuthEndpoints
                 "Limite de tentativas atingido. Aguarde para tentar novamente.", "rate-limit");
         }
 
-        if (request?.Email is null || request.Password is null)
+        if (request?.Cpf is null || request.Password is null)
         {
             return AuthenticationProblems.Create(context, StatusCodes.Status400BadRequest,
-                "Informe um e-mail e uma senha válidos.", "validation");
+                "Informe um CPF e uma senha válidos.", "validation");
         }
 
-        var result = await login.ExecuteAsync(new LoginCommand(request.Email, request.Password), cancellationToken);
+        var result = await login.ExecuteAsync(new LoginCommand(request.Cpf, request.Password), cancellationToken);
         if (result.Status == LoginStatus.InvalidInput)
         {
             return AuthenticationProblems.Create(context, StatusCodes.Status400BadRequest,
-                "Informe um e-mail e uma senha válidos.", "validation");
+                "Informe um CPF e uma senha válidos.", "validation");
         }
 
         if (result.Status != LoginStatus.Succeeded || result.Session is null ||
             result.CookieValue is null || result.AbsoluteExpiresAt is null)
         {
             return AuthenticationProblems.Create(context, StatusCodes.Status401Unauthorized,
-                "E-mail ou senha inválidos.", "authentication-required");
+                "CPF ou senha inválidos.", "authentication-required");
         }
 
         cookie.Write(context, result.CookieValue, result.AbsoluteExpiresAt.Value);
@@ -116,6 +117,17 @@ public static class AuthEndpoints
                 string.Equals(configured.GetLeftPart(UriPartial.Authority), authority, StringComparison.OrdinalIgnoreCase));
     }
 
+    private static string NormalizeCpfForRateLimit(string? cpf)
+    {
+        if (string.IsNullOrWhiteSpace(cpf) || cpf.Length > 32)
+        {
+            return "invalid";
+        }
+
+        var digits = new string(cpf.Where(char.IsDigit).ToArray());
+        return digits.Length == 11 ? digits : "invalid";
+    }
+
     private static async Task<Results<NoContent, ProblemHttpResult>> ActivateAsync(
         [FromBody] AccountActivationHttpRequest? request,
         [FromServices] IAccountActivationService activationService,
@@ -141,7 +153,7 @@ public static class AuthEndpoints
         }
 
         var result = await activationService.ActivateAsync(
-            new AccountActivationRequest(request.Token, request.Password, request.PasswordConfirmation),
+            new AccountActivationRequest(request.Token, request.Password, request.PasswordConfirmation, request.Cpf),
             cancellationToken);
 
         if (result == AccountActivationResult.Activated)
@@ -168,7 +180,8 @@ public static class AuthEndpoints
 public sealed record AccountActivationHttpRequest(
     string? Token,
     string? Password,
-    string? PasswordConfirmation)
+    string? PasswordConfirmation,
+    string? Cpf)
 {
     public override string ToString() => "[REDACTED]";
 }

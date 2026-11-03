@@ -11,7 +11,7 @@ public interface IAuthenticationStore
 
 public interface IAuthenticationTransaction : IAsyncDisposable
 {
-    Task<User?> FindUserAsync(string normalizedEmail, CancellationToken cancellationToken);
+    Task<User?> FindUserByCpfAsync(string cpf, CancellationToken cancellationToken);
     Task<User?> FindUserByIdAsync(Guid userId, CancellationToken cancellationToken);
     Task<UserCredential?> FindCredentialAsync(Guid userId, CancellationToken cancellationToken);
     Task<UserSession?> FindSessionAsync(Guid sessionId, CancellationToken cancellationToken);

@@ -57,8 +57,10 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.Property(item => item.Id).ValueGeneratedNever();
         entity.Property(item => item.Email).HasMaxLength(320).IsRequired();
         entity.Property(item => item.NormalizedEmail).HasMaxLength(320).IsRequired();
+        entity.Property(item => item.Cpf).HasMaxLength(11);
         entity.Property(item => item.DisplayName).HasMaxLength(200).IsRequired();
         entity.HasIndex(item => item.NormalizedEmail).IsUnique();
+        entity.HasIndex(item => item.Cpf).IsUnique().HasFilter("[Cpf] IS NOT NULL");
     }
 
     private static void ConfigureTenant(ModelBuilder modelBuilder)
@@ -69,8 +71,10 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.HasKey(item => item.Id);
         entity.Property(item => item.Id).ValueGeneratedNever();
         entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
+        entity.Property(item => item.Cnpj).HasMaxLength(14);
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
         entity.HasIndex(item => item.Status);
+        entity.HasIndex(item => item.Cnpj).IsUnique().HasFilter("[Cnpj] IS NOT NULL");
     }
 
     private static void ConfigurePlatformAdministrator(ModelBuilder modelBuilder)

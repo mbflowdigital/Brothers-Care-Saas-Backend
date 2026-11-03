@@ -316,6 +316,10 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Cpf")
+                        .HasMaxLength(11)
+                        .HasColumnType("nvarchar(11)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -335,6 +339,10 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(320)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Cpf")
+                        .IsUnique()
+                        .HasFilter("[Cpf] IS NOT NULL");
 
                     b.HasIndex("NormalizedEmail")
                         .IsUnique();
@@ -520,6 +528,10 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Cnpj")
+                        .HasMaxLength(14)
+                        .HasColumnType("nvarchar(14)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -532,6 +544,10 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Cnpj")
+                        .IsUnique()
+                        .HasFilter("[Cnpj] IS NOT NULL");
 
                     b.HasIndex("Status");
 
