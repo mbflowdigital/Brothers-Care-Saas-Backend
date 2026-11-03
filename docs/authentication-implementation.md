@@ -86,7 +86,7 @@ Usar para ativação inicial, recuperação de senha e convite de acesso até ex
 | --- | --- | --- |
 | `id` | UUID | Chave primária. |
 | `user_id` | UUID | FK para `users`. |
-| `purpose` | enum | `AccountActivation`, `PasswordRecovery`, `InvitationAcceptance`. |
+| `purpose` | enum | `AccountActivation`, `PasswordRecovery`, `InvitationAcceptance`, `CommercialOnboarding`. |
 | `secret_hash` | binário ou texto | Hash SHA-256 do token aleatório; único. |
 | `created_at` | datetimeoffset | Obrigatório. |
 | `expires_at` | datetimeoffset | Obrigatório; padrão de 30 minutos. |
@@ -115,7 +115,7 @@ Regras:
 ### Onboarding da primeira administradora
 
 1. Após pagamento, o cadastro comercial recebe CNPJ, nome da empresa e e-mail do responsável. O CNPJ é obrigatório e único por tenant.
-2. O servidor registra o onboarding pendente e envia um convite de onboarding, sem credencial, sessão, unidade ou membership ativa.
+2. O servidor registra o onboarding pendente, cria uma credencial em `PendingActivation` e uma membership administrativa em `Invited`, e envia um convite de onboarding. Não cria senha, sessão, unidade ou membership ativa.
 3. Ao aceitar, a pessoa informa seu CPF, completa o perfil pessoal e define a senha. O CPF é a identidade global e será usado no login.
 4. O aceite exige a criação da primeira clínica/unidade.
 5. Na mesma transação, o servidor cria ou vincula a identidade global, cria a primeira unidade e cria `tenant_membership` com papel `ClinicAdministrator` e estado `Active`.

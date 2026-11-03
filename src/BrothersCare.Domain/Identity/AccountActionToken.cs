@@ -18,8 +18,8 @@ public sealed class AccountActionToken
             throw new ArgumentException("A SHA-256 hash and valid expiration window are required.");
         }
 
-        if (tenantMembershipId == Guid.Empty ||
-            (purpose == AccountActionTokenPurpose.InvitationAcceptance) != tenantMembershipId.HasValue)
+        var requiresMembership = purpose is AccountActionTokenPurpose.InvitationAcceptance or AccountActionTokenPurpose.CommercialOnboarding;
+        if (tenantMembershipId == Guid.Empty || requiresMembership != tenantMembershipId.HasValue)
         {
             throw new ArgumentException("Only invitation tokens must reference a membership.");
         }
@@ -72,4 +72,5 @@ public enum AccountActionTokenPurpose
     AccountActivation = 1,
     PasswordRecovery = 2,
     InvitationAcceptance = 3,
+    CommercialOnboarding = 4,
 }

@@ -151,6 +151,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
     Predicate = registration => registration.Tags.Contains("ready"),
 }).AllowAnonymous();
 app.MapAuthEndpoints();
+app.MapCommercialOnboardingEndpoints();
 app.MapTenantEndpoints();
 app.MapTenantListEndpoints();
 app.MapTenantLifecycleEndpoints();

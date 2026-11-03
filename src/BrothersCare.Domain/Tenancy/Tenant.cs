@@ -19,6 +19,14 @@ public sealed class Tenant
         Status = TenantStatus.Active;
     }
 
+    public static Tenant CreatePendingOnboarding(Guid id, string name, string cnpj, DateTimeOffset createdAt)
+    {
+        var tenant = new Tenant(id, name, createdAt);
+        tenant.SetCnpj(cnpj);
+        tenant.Status = TenantStatus.PendingOnboarding;
+        return tenant;
+    }
+
     public Guid Id { get; private set; }
 
     public string Name { get; private set; } = string.Empty;
@@ -104,4 +112,5 @@ public enum TenantStatus
     Active = 1,
     Suspended = 2,
     Deactivated = 3,
+    PendingOnboarding = 4,
 }

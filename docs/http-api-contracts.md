@@ -49,6 +49,7 @@ Superadministradores Brothers não recebem acesso clínico por possuírem acesso
 | Área | Rotas propostas | Observação |
 | --- | --- | --- |
 | Sessão | `POST /sessions`, `GET /session`, `DELETE /session` | Depende da decisão de identidade. |
+| Onboarding comercial de desenvolvimento | `POST /commercial-onboardings/simulated-payment` | Simula a confirmação de compra apenas em `Development`; não processa pagamento real. |
 | Convites e recuperação | `POST /invitations`, `POST /password-recovery-requests`, `POST /password-recovery-confirmations` | Não revelar se e-mail existe. |
 | Empresas e unidades | `GET/POST/PATCH /tenants`, `GET/POST/PATCH /clinic-units` | Administração Brothers e administrador da clínica conforme capacidade. |
 | Memberships | `GET/POST/PATCH /memberships`, `GET/POST /clinic-unit-memberships` | Papéis e escopos nunca são confiados ao frontend sem autorização. |
@@ -61,6 +62,27 @@ Superadministradores Brothers não recebem acesso clínico por possuírem acesso
 | Auditoria | `GET /audit-events` | Sem conteúdo clínico no evento. |
 
 Financeiro clínico, convênios, arquivos, comunicação com pacientes, tickets, cobrança automatizada e portal do paciente não entram nos contratos executáveis do primeiro piloto até que o escopo seja aprovado.
+
+## Onboarding comercial simulado
+
+Enquanto a integração com o provedor de pagamentos não está definida, a tela pública de compra usa exclusivamente em desenvolvimento:
+
+`POST /api/v1/commercial-onboardings/simulated-payment`
+
+```json
+{
+  "companyName": "Clínica Exemplo",
+  "cnpj": "11.222.333/0001-81",
+  "responsibleName": "Pessoa Responsável",
+  "responsibleEmail": "responsavel@exemplo.com"
+}
+```
+
+A rota exige o token CSRF normal da aplicação, mesmo sendo anônima. O frontend deve obter `GET /api/v1/auth/csrf`, preservar o cookie retornado e enviar o valor recebido no cabeçalho `X-CSRF-Token` no `POST`, sempre com `credentials: "include"`.
+
+Em caso de sucesso, retorna `201` com o identificador do tenant e o status `PendingOnboarding`. O servidor valida o CNPJ, garante sua unicidade, cria uma membership administrativa em estado `Invited` e envia o e-mail de onboarding. Ainda não cria unidade, CPF, senha, sessão ou acesso clínico. CNPJ já cadastrado retorna `409`; dados inválidos retornam `400`; falha de envio retorna `503`.
+
+A rota retorna `404` fora de `Development` ou quando `CommercialOnboarding:AllowSimulatedPayment` não estiver explicitamente habilitado. A confirmação real de pagamento deverá substituir este ponto por uma integração autenticada com o Asaas, sem expor uma confirmação pública.
 
 ## Operações de coleção
 

@@ -12,7 +12,7 @@ public sealed class AccountActionTokenConfiguration : IEntityTypeConfiguration<A
         builder.ToTable("account_action_tokens", table =>
         {
             table.HasCheckConstraint("ck_account_action_tokens_expiry", "expires_at > created_at");
-            table.HasCheckConstraint("ck_account_action_tokens_membership", "(purpose = 3 AND tenant_membership_id IS NOT NULL) OR (purpose IN (1, 2) AND tenant_membership_id IS NULL)");
+            table.HasCheckConstraint("ck_account_action_tokens_membership", "(purpose IN (3, 4) AND tenant_membership_id IS NOT NULL) OR (purpose IN (1, 2) AND tenant_membership_id IS NULL)");
         });
         builder.HasKey(item => item.Id);
         builder.Property(item => item.Id).ValueGeneratedNever();

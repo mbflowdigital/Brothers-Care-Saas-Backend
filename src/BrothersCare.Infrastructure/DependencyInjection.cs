@@ -60,6 +60,17 @@ public static class DependencyInjection
                 provider.GetService<IPasswordRecoverySender>()));
             services.TryAddSingleton<ITokenGenerator, InvitationTokenService>();
             services.AddScoped<ITenantProvisioningStore, SqlTenantProvisioningStore>();
+            services.AddScoped<ICommercialOnboardingStore, SqlCommercialOnboardingStore>();
+            services.AddScoped(provider => new CreateCommercialOnboarding(
+                provider.GetRequiredService<ICommercialOnboardingStore>(),
+                provider.GetRequiredService<ITokenGenerator>(),
+                provider.GetService<IInvitationSender>(),
+                provider.GetRequiredService<TimeProvider>()));
+            services.AddScoped(provider => new ResendCommercialOnboardingInvitation(
+                provider.GetRequiredService<ICommercialOnboardingStore>(),
+                provider.GetRequiredService<ITokenGenerator>(),
+                provider.GetService<IInvitationSender>(),
+                provider.GetRequiredService<TimeProvider>()));
             services.AddScoped<ITenantListStore, SqlTenantListStore>();
             services.AddScoped<ListTenants>();
             services.AddScoped<GetTenant>();

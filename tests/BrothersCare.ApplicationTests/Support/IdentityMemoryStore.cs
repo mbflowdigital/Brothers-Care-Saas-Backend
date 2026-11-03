@@ -13,6 +13,7 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     IAccountActivationStore, IAccountActivationTransaction, IPasswordRecoveryStore, IPasswordRecoveryTransaction,
     IPlatformAdministratorStore, IPlatformAdministratorTransaction, ITenantInvitationStore, ITenantInvitationTransaction,
     ITenantProvisioningStore, ITenantProvisioningTransaction, ITenantInvitationPlanUsageStore,
+    ICommercialOnboardingStore, ICommercialOnboardingTransaction,
     ITenantLifecycleStore, ITenantLifecycleTransaction, IClinicUnitStore, IClinicUnitTransaction
 {
     public List<User> Users { get; } = [];
@@ -35,6 +36,7 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     Task<IPlatformAdministratorTransaction> IPlatformAdministratorStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<IPlatformAdministratorTransaction>(this);
     Task<ITenantInvitationTransaction> ITenantInvitationStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<ITenantInvitationTransaction>(this);
     Task<ITenantProvisioningTransaction> ITenantProvisioningStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<ITenantProvisioningTransaction>(this);
+    Task<ICommercialOnboardingTransaction> ICommercialOnboardingStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<ICommercialOnboardingTransaction>(this);
     Task<ITenantLifecycleTransaction> ITenantLifecycleStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<ITenantLifecycleTransaction>(this);
     Task<IClinicUnitTransaction> IClinicUnitStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<IClinicUnitTransaction>(this);
 
@@ -43,6 +45,9 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
         LastNormalizedEmail = normalizedEmail;
         return Task.FromResult(Users.SingleOrDefault(item => item.NormalizedEmail == normalizedEmail));
     }
+
+    public Task<User?> FindUserByEmailAsync(string normalizedEmail, CancellationToken cancellationToken) =>
+        FindUserAsync(normalizedEmail, cancellationToken);
 
     public Task<User?> FindUserByCpfAsync(string cpf, CancellationToken cancellationToken)
     {
@@ -57,6 +62,16 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     public Task<AccountActionToken?> FindTokenAsync(byte[] secretHash, CancellationToken cancellationToken) => Task.FromResult(Tokens.SingleOrDefault(item => item.SecretHash.SequenceEqual(secretHash)));
     public Task<PlatformAdministrator?> FindAdministratorAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(Administrators.SingleOrDefault(item => item.UserId == userId));
     public Task<Tenant?> FindTenantAsync(Guid tenantId, CancellationToken cancellationToken) => Task.FromResult(Tenants.SingleOrDefault(item => item.Id == tenantId));
+    public Task<Tenant?> FindTenantByCnpjAsync(string cnpj, CancellationToken cancellationToken) => Task.FromResult(Tenants.SingleOrDefault(item => item.Cnpj == cnpj));
+    public Task<CommercialOnboardingInvitation?> FindPendingInvitationAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var tenant = Tenants.SingleOrDefault(item => item.Id == tenantId);
+        var membership = Memberships.SingleOrDefault(item => item.TenantId == tenantId);
+        var user = membership is null ? null : Users.SingleOrDefault(item => item.Id == membership.UserId);
+        return Task.FromResult(tenant is null || membership is null || user is null
+            ? null
+            : new CommercialOnboardingInvitation(tenant, membership, user));
+    }
     public Task<TenantMembership?> FindMembershipAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) => Task.FromResult(Memberships.SingleOrDefault(item => item.TenantId == tenantId && item.UserId == userId));
     public Task<TenantMembership?> FindInvitationAsync(Guid membershipId, Guid userId, CancellationToken cancellationToken) => Task.FromResult(Memberships.SingleOrDefault(item => item.Id == membershipId && item.UserId == userId));
     public Task<bool> IsTenantActiveAsync(Guid tenantId, CancellationToken cancellationToken) => Task.FromResult(Tenants.Any(item => item.Id == tenantId && item.Status == TenantStatus.Active));
@@ -194,6 +209,8 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
 
     public Task RevokePreviousInvitationsAsync(Guid membershipId, DateTimeOffset now, CancellationToken cancellationToken) =>
         RevokeTokensAsync(item => item.TenantMembershipId == membershipId && item.Purpose == AccountActionTokenPurpose.InvitationAcceptance, now);
+    public Task RevokeOnboardingTokensAsync(Guid membershipId, DateTimeOffset now, CancellationToken cancellationToken) =>
+        RevokeTokensAsync(item => item.TenantMembershipId == membershipId && item.Purpose == AccountActionTokenPurpose.CommercialOnboarding, now);
     public Task RevokeActivationTokensAsync(Guid userId, DateTimeOffset now, CancellationToken cancellationToken) =>
         RevokeTokensAsync(item => item.UserId == userId && item.Purpose == AccountActionTokenPurpose.AccountActivation, now);
     public Task RevokeRecoveryTokensAsync(Guid userId, DateTimeOffset now, Guid? exceptTokenId, CancellationToken cancellationToken) =>

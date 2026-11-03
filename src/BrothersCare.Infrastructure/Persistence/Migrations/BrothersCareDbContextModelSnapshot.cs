@@ -280,7 +280,7 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_account_action_tokens_expiry", "expires_at > created_at");
 
-                            t.HasCheckConstraint("ck_account_action_tokens_membership", "(purpose = 3 AND tenant_membership_id IS NOT NULL) OR (purpose IN (1, 2) AND tenant_membership_id IS NULL)");
+                            t.HasCheckConstraint("ck_account_action_tokens_membership", "(purpose IN (3, 4) AND tenant_membership_id IS NOT NULL) OR (purpose IN (1, 2) AND tenant_membership_id IS NULL)");
                         });
                 });
 
@@ -553,7 +553,7 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
 
                     b.ToTable("tenants", null, t =>
                         {
-                            t.HasCheckConstraint("CK_tenants_status", "[Status] IN (1, 2, 3)");
+                            t.HasCheckConstraint("CK_tenants_status", "[Status] IN (1, 2, 3, 4)");
                         });
                 });
 

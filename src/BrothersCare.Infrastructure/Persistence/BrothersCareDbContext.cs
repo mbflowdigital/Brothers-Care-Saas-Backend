@@ -67,7 +67,7 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
     {
         var entity = modelBuilder.Entity<Tenant>();
         entity.ToTable("tenants", table =>
-            table.HasCheckConstraint("CK_tenants_status", "[Status] IN (1, 2, 3)"));
+            table.HasCheckConstraint("CK_tenants_status", "[Status] IN (1, 2, 3, 4)"));
         entity.HasKey(item => item.Id);
         entity.Property(item => item.Id).ValueGeneratedNever();
         entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
