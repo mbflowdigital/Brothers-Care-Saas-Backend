@@ -535,7 +535,10 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("tenants", (string)null);
+                    b.ToTable("tenants", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_tenants_status", "[Status] IN (1, 2, 3)");
+                        });
                 });
 
             modelBuilder.Entity("BrothersCare.Domain.Tenancy.TenantMembership", b =>

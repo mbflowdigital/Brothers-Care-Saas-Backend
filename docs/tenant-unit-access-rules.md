@@ -10,19 +10,21 @@ As regras aqui definidas prevalecem sobre comportamentos mockados do frontend. P
 
 - **Empresa** é o tenant do SaaS e delimita todos os seus dados operacionais e clínicos.
 - **Unidade** pertence a uma única empresa.
-- **Pessoa** é uma identidade global, identificada pelo CPF. O e-mail é único por pessoa e é usado para login e envio de comunicações.
+- **Pessoa** é uma identidade global, identificada pelo CPF. O e-mail é único por pessoa e é usado somente para convite, recuperação e comunicações.
 - **Vínculo (membership)** concede à pessoa acesso a uma empresa. Uma mesma pessoa pode ter vínculos ativos em mais de uma empresa.
 - **Paciente** é um cadastro interno de uma empresa; não possui login nem acesso ao produto no MVP.
 
 ## Identidade, convite e login
 
-1. O CPF é o identificador da pessoa. Ele deve ser informado e validado na primeira ativação de conta, junto com a definição da senha.
-2. O e-mail é único por pessoa, é usado para enviar convites e permanece como identificador do login, juntamente com a senha.
-3. Uma empresa pode ser criada inicialmente sem CNPJ. Quando informado, o CNPJ identifica a empresa e deve ser validado antes de ser persistido.
-4. Um convite destinado a e-mail já cadastrado reutiliza a mesma pessoa global. Ao aceitar, ela não redefine CPF nem senha; somente ganha o novo vínculo com a empresa convidante.
-5. A existência de vínculos dessa pessoa em outras empresas nunca é exposta ao administrador que a convida.
-6. Depois de autenticar, a pessoa deve obrigatoriamente escolher uma empresa entre os seus vínculos ativos, inclusive em cada novo login. Não há abertura automática pela última empresa usada.
-7. A empresa selecionada é o contexto ativo da sessão no servidor. Nenhuma rota de negócio deve confiar no tenant enviado pelo cliente como fonte de autorização.
+1. O CNPJ é obrigatório para cadastrar uma empresa e identifica o tenant de forma única. O mesmo CNPJ não pode gerar dois tenants.
+2. Após o pagamento, a empresa informa CNPJ, nome e e-mail do responsável. A plataforma envia a esse e-mail um convite de onboarding vinculado à empresa.
+3. No aceite do onboarding, a pessoa cria seu perfil pessoal, informa CPF e define a senha. O CPF identifica a pessoa globalmente e deve ser validado antes de ser persistido.
+4. O e-mail é único por pessoa e é usado somente para convite, recuperação e comunicações; não é identificador de login.
+5. O login é realizado por CPF e senha.
+6. Um mesmo CPF pode possuir vínculo ativo com mais de uma empresa/CNPJ. Depois de autenticar, a pessoa deve obrigatoriamente escolher uma empresa entre os seus vínculos ativos, inclusive em cada novo login. Não há abertura automática pela última empresa usada.
+7. Um convite destinado a pessoa já cadastrada reutiliza sua identidade global. O aceite não redefine CPF ou senha; somente concede o vínculo aprovado.
+8. A existência de vínculos dessa pessoa em outras empresas nunca é exposta ao administrador que a convida.
+9. A empresa selecionada é o contexto ativo da sessão no servidor. Nenhuma rota de negócio deve confiar no tenant enviado pelo cliente como fonte de autorização.
 
 ## Papéis e capacidades
 
@@ -30,7 +32,7 @@ No MVP existem somente os perfis abaixo:
 
 | Perfil | Capacidades aprovadas |
 | --- | --- |
-| Superadministrador da plataforma | Cria empresas e convida o primeiro administrador. Pode consultar e administrar informações de plataforma, empresas, unidades e acessos necessários para suporte. Não recebe acesso a dados clínicos. |
+| Superadministrador da plataforma | Administra informações de plataforma, empresas, unidades e acessos necessários para suporte. Não recebe acesso a dados clínicos. O onboarding comercial cria a empresa e o primeiro vínculo administrativo. |
 | Administrador da empresa | Gerencia profissionais, pacientes, unidades e os vínculos entre eles na própria empresa. Pode visualizar integralmente as informações clínicas de sua empresa. Não pode criar empresas. Pode também atuar como profissional de atendimento. |
 | Profissional | Atua nas unidades às quais está vinculado e acessa somente os pacientes associados a ele, conforme as regras de vínculo de cuidado. |
 
@@ -41,9 +43,9 @@ No MVP existem somente os perfis abaixo:
 
 ## Empresas e unidades
 
-1. Somente o superadministrador cria uma empresa.
-2. A criação da empresa exige o convite do primeiro administrador; não existe empresa utilizável sem esse convite.
-3. Uma empresa pode ser criada sem nenhuma unidade e as unidades podem ser cadastradas posteriormente.
+1. O cadastro comercial cria uma empresa a partir de CNPJ único e envia o convite de onboarding ao responsável informado.
+2. Ao aceitar o onboarding, o responsável deve criar obrigatoriamente a primeira clínica/unidade e recebe automaticamente a membership `ClinicAdministrator` da empresa.
+3. A empresa não se torna utilizável antes de existir seu primeiro administrador ativo e sua primeira unidade.
 4. Um administrador pode criar, editar e desativar unidades apenas da sua própria empresa.
 5. O nome de unidade deve ser único dentro da empresa, mas pode se repetir em empresas diferentes.
 6. Empresas e unidades não são excluídas fisicamente pelo fluxo do produto. A desativação preserva relacionamentos e histórico.
@@ -61,8 +63,8 @@ No MVP existem somente os perfis abaixo:
 
 1. A unidade desativada deixa de aceitar novos vínculos, atendimentos ou agendamentos e mantém todo o histórico.
 2. Antes de concluir a desativação, os agendamentos futuros dessa unidade devem ser tratados.
-3. Existindo outra unidade ativa na mesma empresa, os atendimentos futuros devem ser remanejados para uma unidade ativa.
-4. Não existindo outra unidade ativa, os agendamentos futuros devem ser cancelados.
+3. Todos os agendamentos futuros da unidade são cancelados automaticamente, mesmo que existam outras unidades ativas na empresa.
+4. A desativação nunca remaneja automaticamente um agendamento para outra unidade.
 
 ## Profissionais, pacientes e vínculo de cuidado
 
@@ -89,10 +91,8 @@ Devem gerar auditoria no servidor, no mínimo: criação, alteração, suspensã
 
 ## Decisões ainda pendentes
 
-- Quem pode editar os dados cadastrais da empresa, incluindo nome e CNPJ.
-- Em que momento o CNPJ passa a ser obrigatório para uma empresa criada de forma provisória.
-- Regras de formato, validação e tratamento de exceções para CPF e CNPJ.
-- Fluxo de remanejamento: qual unidade de destino é escolhida, quem a escolhe e como tratar conflitos de agenda.
+- Quem pode editar os dados cadastrais da empresa, incluindo nome e CNPJ após o onboarding.
+- Regras de formato, validação e tratamento de exceções para CPF e CNPJ, além da validação de unicidade já aprovada.
 - Regras completas de criação, inativação e convite de profissionais.
 - Detalhamento de quais dados históricos o profissional anterior pode ler após a transferência, respeitando a necessidade clínica e a LGPD.
 

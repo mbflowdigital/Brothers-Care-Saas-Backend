@@ -100,4 +100,5 @@ public enum SessionRevocationReason
     AccountDisabled = 3,
     SecurityIncident = 4,
     Expired = 5,
+    TenantUnavailable = 6,
 }

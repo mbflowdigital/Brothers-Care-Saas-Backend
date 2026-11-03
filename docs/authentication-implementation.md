@@ -14,7 +14,7 @@ Esta especificação complementa [mvp-business-rules.md](mvp-business-rules.md) 
 | Credencial | Senha armazenada somente como hash versionado. Usar `PasswordHasher<TUser>` do ASP.NET Core Identity ou Argon2id com parâmetros aprovados; nunca usar hash próprio, SHA, MD5 ou criptografia reversível. |
 | Tenant ativo | Mantido na sessão no servidor. A troca ocorre por endpoint autenticado e valida membership ativa; o cliente não envia `tenantId` como fonte de autorização para as operações de clínica. |
 | Superadministrador | `platform_administrators` é global e separado de `tenant_memberships`. Esse papel não concede acesso clínico automático. |
-| Criação de usuários clínicos | A empresa deve existir antes do convite. O usuário é uma identidade global e recebe acesso por `tenant_membership`; não criar uma identidade duplicada para a mesma pessoa. |
+| Cadastro comercial e onboarding | O cadastro comercial usa CNPJ único, nome da empresa e e-mail do responsável. O convite de onboarding cria a identidade global por CPF no aceite, a primeira unidade e a membership administrativa. |
 | Expiração | 30 minutos de inatividade e 12 horas de duração máxima, configuráveis por ambiente. |
 | Logout | Revoga a sessão no banco e expira o cookie. |
 | Recuperação/ativação | Token de uso único, aleatório, com hash persistido, expiração curta e nunca incluído em logs. |
@@ -112,19 +112,17 @@ Regras:
 
 ## Fluxo de criação de empresa e usuários
 
-### Primeiro administrador de uma empresa
+### Onboarding da primeira administradora
 
-1. Um superadministrador autenticado cria o `tenant` e, quando aplicável, a primeira unidade.
-2. Ele informa o nome e o e-mail do primeiro administrador da clínica.
-3. O servidor busca `users` por e-mail normalizado.
-4. Se a identidade ainda não existir, cria `User` global e `UserCredential` em `PendingActivation`.
-5. O servidor cria `tenant_membership` com papel `ClinicAdministrator` e estado `Invited`.
-6. O servidor cria `AccountActionToken` com finalidade `InvitationAcceptance`, vinculado à identidade e ao convite.
-7. O token é entregue pelo canal de comunicação aprovado. A resposta da API não devolve o token.
-8. A pessoa aceita o convite, define a senha se necessário e a membership muda para `Active` na mesma transação que consome o token.
-9. Somente depois da ativação a pessoa pode selecionar o tenant e operar a clínica.
+1. Após pagamento, o cadastro comercial recebe CNPJ, nome da empresa e e-mail do responsável. O CNPJ é obrigatório e único por tenant.
+2. O servidor registra o onboarding pendente e envia um convite de onboarding, sem credencial, sessão, unidade ou membership ativa.
+3. Ao aceitar, a pessoa informa seu CPF, completa o perfil pessoal e define a senha. O CPF é a identidade global e será usado no login.
+4. O aceite exige a criação da primeira clínica/unidade.
+5. Na mesma transação, o servidor cria ou vincula a identidade global, cria a primeira unidade e cria `tenant_membership` com papel `ClinicAdministrator` e estado `Active`.
+6. O token é consumido e a resposta não o devolve.
+7. Somente depois desse onboarding a pessoa pode entrar por CPF e senha, escolher a empresa e operar a clínica.
 
-O superadministrador pode criar empresa e convite, mas não se torna administrador clínico nem ganha acesso a dados do tenant por essa ação.
+O superadministrador não se torna administrador clínico nem ganha acesso a dados do tenant por ações de plataforma.
 
 ### Convites feitos pelo administrador da clínica
 
@@ -195,16 +193,16 @@ Request:
 
 ```json
 {
-  "email": "admin@empresa.exemplo",
+  "cpf": "12345678909",
   "password": "senha-informada-somente-nesta-requisicao"
 }
 ```
 
 Comportamento:
 
-1. Validar formato, limite de tamanho e presença de e-mail e senha.
-2. Aplicar rate limit por IP e por e-mail normalizado sem diferenciar usuário existente de inexistente.
-3. Localizar `users` pelo e-mail normalizado e `user_credentials` correspondente.
+1. Validar formato, limite de tamanho e presença de CPF e senha.
+2. Aplicar rate limit por IP e por CPF normalizado sem diferenciar usuário existente de inexistente.
+3. Localizar `users` pelo CPF normalizado e `user_credentials` correspondente.
 4. Verificar bloqueio, estado da credencial e hash da senha.
 5. Para qualquer falha de credencial, retornar o mesmo `401` genérico, incrementar tentativas somente quando houver conta ativa e não registrar a senha.
 6. Em sucesso, zerar tentativas, criar sessão, definir cookie e retornar resumo da sessão sem dados clínicos.
@@ -335,7 +333,14 @@ Possui o mesmo formato e validações da ativação, mas exige token com finalid
 - Normalizar para `Trim().ToUpperInvariant()` apenas para busca e unicidade; preservar o valor apresentado em formato normalizado pela aplicação.
 - Limite máximo de 320 caracteres.
 - Não aceitar espaço inicial/final após a normalização.
-- A validação de formato reduz entradas inválidas, mas não verifica entrega de e-mail no login.
+- A validação de formato reduz entradas inválidas, mas o e-mail não participa do login.
+
+### CPF e CNPJ
+
+- CPF é obrigatório no aceite do onboarding e único para cada identidade global.
+- CNPJ é obrigatório no cadastro comercial e único para cada tenant.
+- Os documentos devem ser normalizados para dígitos antes de validação, busca e unicidade.
+- CPF e CNPJ não podem aparecer em logs, tokens, URLs ou mensagens de erro.
 
 ### Senha
 
@@ -388,7 +393,7 @@ Proposta inicial:
 
 | Rota | Limite inicial |
 | --- | --- |
-| Login | 10 tentativas por IP em 10 minutos e 5 por e-mail normalizado em 15 minutos |
+| Login | 10 tentativas por IP em 10 minutos e 5 por CPF normalizado em 15 minutos |
 | Ativação e confirmação de recuperação | 10 tentativas por IP em 15 minutos |
 | Solicitação de recuperação | 3 solicitações por e-mail em 30 minutos e 10 por IP em 30 minutos |
 
@@ -416,7 +421,7 @@ O comando é idempotente para administrador ativo com o mesmo usuário. Ele não
 
 ## Primeiro administrador após o bootstrap
 
-O bootstrap cria somente o operador global da Brothers Digital. Para tornar uma empresa utilizável, a próxima operação administrativa precisa criar o tenant e convidar seu primeiro `ClinicAdministrator`; criar o tenant sem esse convite não deve conceder acesso a nenhuma pessoa da clínica.
+O bootstrap cria somente o operador global da Brothers Digital. Empresas utilizáveis são criadas pelo fluxo comercial de CNPJ e onboarding; o bootstrap não concede acesso clínico nem substitui esse fluxo.
 
 ## Organização sugerida
 
@@ -453,8 +458,8 @@ Manter endpoints finos. Regras de estado, expiração, revogação e seleção d
 
 1. Criar entidades, mappings EF Core, índices e migração das credenciais, sessões, tokens de ação e novos estados de membership.
 2. Adicionar abstrações de hash de senha, geração de segredo, relógio e envio de mensagens somente quando houver consumidor concreto.
-3. Implementar criação de tenant e convite do primeiro administrador, incluindo criação ou reutilização segura de `User`.
-4. Implementar ativação de conta, aceite de convite e provisionamento seguro do primeiro superadministrador.
+3. Implementar cadastro comercial por CNPJ e convite de onboarding, incluindo criação ou reutilização segura de `User` por CPF no aceite.
+4. Implementar aceite de onboarding com perfil pessoal, primeira unidade e membership administrativa, além do provisionamento seguro do primeiro superadministrador.
 5. Implementar login, emissão de cookie opaco e consulta de sessão.
 6. Implementar tenant ativo e middleware/handler de autenticação.
 7. Implementar logout, revogação global em troca de senha e expiração de sessão.
@@ -497,7 +502,7 @@ Manter endpoints finos. Regras de estado, expiração, revogação e seleção d
 
 - Login, consulta de sessão, seleção de tenant, logout, expiração e recuperação funcionam sem `localStorage` para credenciais ou sessão.
 - O primeiro superadministrador pode ativar a conta por token único e entrar sem receber tenant ou acesso clínico automático.
-- Superadministrador consegue criar uma empresa e convidar seu primeiro administrador, sem obter acesso clínico à empresa criada.
+- Cadastro comercial por CNPJ único envia onboarding e cria a primeira empresa, unidade e membership administrativa sem conceder acesso clínico ao superadministrador.
 - Administrador de clínica consegue convidar usuários somente para seu tenant e unidades autorizadas; o aceite ativa a membership correspondente.
 - Sessões são revogadas no servidor e cookies roubados/alterados não são aceitos após logout, expiração ou troca de senha.
 - Cada rota protegida usa identidade server-side; nenhum tenant é aceito apenas por payload do cliente.

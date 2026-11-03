@@ -21,4 +21,30 @@ public sealed class SqlTenantListStore(BrothersCareDbContext dbContext) : ITenan
                 .FirstOrDefault() ?? "WithoutAdministrator"))
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<TenantDetails?> GetAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var tenant = await dbContext.Tenants.AsNoTracking()
+            .Where(item => item.Id == tenantId)
+            .Select(item => new { item.Id, item.Name, Status = item.Status.ToString() })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (tenant is null)
+        {
+            return null;
+        }
+
+        var administrator = await (
+            from membership in dbContext.TenantMemberships.AsNoTracking()
+            join user in dbContext.Users.AsNoTracking() on membership.UserId equals user.Id
+            where membership.TenantId == tenantId && membership.Role == TenantMembershipRole.ClinicAdministrator
+            orderby membership.CreatedAt
+            select new TenantAdministratorDetails(
+                membership.Id,
+                user.DisplayName,
+                user.Email,
+                membership.Status.ToString()))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return new TenantDetails(tenant.Id, tenant.Name, tenant.Status, administrator);
+    }
 }

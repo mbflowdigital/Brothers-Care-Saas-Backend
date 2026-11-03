@@ -153,6 +153,8 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 app.MapAuthEndpoints();
 app.MapTenantEndpoints();
 app.MapTenantListEndpoints();
+app.MapTenantLifecycleEndpoints();
+app.MapClinicUnitEndpoints();
 app.MapInvitationEndpoints();
 
 app.Run();

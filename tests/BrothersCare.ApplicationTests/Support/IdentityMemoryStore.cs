@@ -1,6 +1,8 @@
 using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Application.Identity.Sessions;
+using BrothersCare.Application.Tenancy;
 using BrothersCare.Application.Tenancy.Contracts;
+using BrothersCare.Domain.Care;
 using BrothersCare.Domain.Identity;
 using BrothersCare.Domain.Tenancy;
 
@@ -10,7 +12,8 @@ namespace BrothersCare.ApplicationTests.Support;
 internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticationTransaction,
     IAccountActivationStore, IAccountActivationTransaction, IPasswordRecoveryStore, IPasswordRecoveryTransaction,
     IPlatformAdministratorStore, IPlatformAdministratorTransaction, ITenantInvitationStore, ITenantInvitationTransaction,
-    ITenantProvisioningStore, ITenantProvisioningTransaction, ITenantInvitationPlanUsageStore
+    ITenantProvisioningStore, ITenantProvisioningTransaction, ITenantInvitationPlanUsageStore,
+    ITenantLifecycleStore, ITenantLifecycleTransaction, IClinicUnitStore, IClinicUnitTransaction
 {
     public List<User> Users { get; } = [];
     public List<UserCredential> Credentials { get; } = [];
@@ -19,6 +22,7 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     public List<PlatformAdministrator> Administrators { get; } = [];
     public List<Tenant> Tenants { get; } = [];
     public List<ClinicUnit> Units { get; } = [];
+    public List<Appointment> Appointments { get; } = [];
     public List<TenantMembership> Memberships { get; } = [];
     public List<ClinicUnitMembership> UnitMemberships { get; } = [];
     public int Commits { get; private set; }
@@ -30,6 +34,8 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     Task<IPlatformAdministratorTransaction> IPlatformAdministratorStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<IPlatformAdministratorTransaction>(this);
     Task<ITenantInvitationTransaction> ITenantInvitationStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<ITenantInvitationTransaction>(this);
     Task<ITenantProvisioningTransaction> ITenantProvisioningStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<ITenantProvisioningTransaction>(this);
+    Task<ITenantLifecycleTransaction> ITenantLifecycleStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<ITenantLifecycleTransaction>(this);
+    Task<IClinicUnitTransaction> IClinicUnitStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<IClinicUnitTransaction>(this);
 
     public Task<User?> FindUserAsync(string normalizedEmail, CancellationToken cancellationToken)
     {
@@ -51,6 +57,10 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     public Task<bool> HasActiveCredentialAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(Credentials.Any(item => item.UserId == userId && item.Status == UserCredentialStatus.Active));
     public Task<bool> IsSessionActiveAsync(Guid sessionId, Guid userId, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(Sessions.Any(item => item.Id == sessionId && item.UserId == userId && item.IsValidAt(now)));
     public Task<bool> IsActiveSuperAdministratorAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(Administrators.Any(item => item.UserId == userId && item.Status == PlatformAdministratorStatus.Active && item.Role == PlatformAdministratorRole.SuperAdministrator));
+    public Task<bool> HasActiveClinicAdministratorAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
+        Task.FromResult(Memberships.Any(item => item.TenantId == tenantId && item.UserId == userId &&
+            item.Status == MembershipStatus.Active && item.Role == TenantMembershipRole.ClinicAdministrator) &&
+            Tenants.Any(item => item.Id == tenantId && item.Status == TenantStatus.Active));
 
     public Task<TenantMembership?> FindSelectableMembershipAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) => Task.FromResult(Memberships.SingleOrDefault(item => item.UserId == userId && item.TenantId == tenantId && item.Status == MembershipStatus.Active && Tenants.Any(tenant => tenant.Id == tenantId && tenant.Status == TenantStatus.Active)));
 
@@ -75,6 +85,40 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
             administrator is null ? null : new SessionPlatformAdministrator(administrator.Role.ToString()), memberships,
             selected is null ? null : new SessionTenant(selected.TenantId, selected.TenantName), session.IdleExpiresAt));
     }
+
+    public Task<ClinicUnitPage> ListAsync(Guid tenantId, string? search, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var query = Units.Where(item => item.TenantId == tenantId);
+        if (search is not null)
+        {
+            query = query.Where(item => item.Name.Contains(search, StringComparison.Ordinal));
+        }
+
+        var totalItems = query.Count();
+        var items = query.OrderBy(item => item.Name).ThenBy(item => item.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(item => new ClinicUnitItem(item.Id, item.Name, item.IsActive, item.CreatedAt)).ToArray();
+        return Task.FromResult(new ClinicUnitPage(items, page, pageSize, totalItems,
+            totalItems == 0 ? 0 : (int)Math.Ceiling(totalItems / (double)pageSize)));
+    }
+
+    public Task<ClinicUnitDetails?> FindAsync(Guid tenantId, Guid clinicUnitId, CancellationToken cancellationToken) =>
+        Task.FromResult(Units.Where(item => item.TenantId == tenantId && item.Id == clinicUnitId)
+            .Select(item => new ClinicUnitDetails(item.Id, item.Name, item.IsActive, item.CreatedAt)).SingleOrDefault());
+
+    public Task<ClinicUnit?> FindTrackedAsync(Guid tenantId, Guid clinicUnitId, CancellationToken cancellationToken) =>
+        Task.FromResult(Units.SingleOrDefault(item => item.TenantId == tenantId && item.Id == clinicUnitId));
+
+    public Task<IReadOnlyList<Appointment>> FindFutureScheduledAppointmentsAsync(
+        Guid tenantId,
+        Guid clinicUnitId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Appointment>>(Appointments.Where(item => item.TenantId == tenantId &&
+            item.ClinicUnitId == clinicUnitId && item.Status == AppointmentStatus.Scheduled && item.StartsAt > now).ToArray());
+
+    public Task<bool> NameExistsAsync(Guid tenantId, string name, Guid? exceptClinicUnitId, CancellationToken cancellationToken) =>
+        Task.FromResult(Units.Any(item => item.TenantId == tenantId && item.Name == name && item.Id != exceptClinicUnitId));
 
     public async Task<IReadOnlyList<Guid>> GetAuthorizedClinicUnitIdsAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
     {
@@ -101,6 +145,7 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     public void AddInvitationToken(AccountActionToken token) => Tokens.Add(token);
     public void AddTenant(Tenant tenant) => Tenants.Add(tenant);
     public void AddClinicUnit(ClinicUnit unit) => Units.Add(unit);
+    public void Add(ClinicUnit clinicUnit) => Units.Add(clinicUnit);
     public void AddMembership(TenantMembership membership) => Memberships.Add(membership);
     public void AddUnitMembership(ClinicUnitMembership membership) => UnitMemberships.Add(membership);
 
@@ -127,6 +172,16 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
         {
             session.Revoke(now, SessionRevocationReason.SecurityIncident);
         }
+        return Task.CompletedTask;
+    }
+
+    public Task RevokeActiveTenantSessionsAsync(Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        foreach (var session in Sessions.Where(item => item.ActiveTenantId == tenantId && item.RevokedAt is null))
+        {
+            session.Revoke(now, SessionRevocationReason.TenantUnavailable);
+        }
+
         return Task.CompletedTask;
     }
 

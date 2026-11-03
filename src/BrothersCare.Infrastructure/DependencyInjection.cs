@@ -62,6 +62,11 @@ public static class DependencyInjection
             services.AddScoped<ITenantProvisioningStore, SqlTenantProvisioningStore>();
             services.AddScoped<ITenantListStore, SqlTenantListStore>();
             services.AddScoped<ListTenants>();
+            services.AddScoped<GetTenant>();
+            services.AddScoped<ITenantLifecycleStore, SqlTenantLifecycleStore>();
+            services.AddScoped<ChangeTenantLifecycle>();
+            services.AddScoped<IClinicUnitStore, SqlClinicUnitStore>();
+            services.AddScoped<ManageClinicUnits>();
             services.AddScoped<ITenantInvitationStore, SqlTenantInvitationStore>();
             services.AddScoped<ITenantInvitationPlanUsageStore, SqlTenantInvitationPlanUsageStore>();
             services.TryAddSingleton(new ProvisionalInvitationPlanSettings(

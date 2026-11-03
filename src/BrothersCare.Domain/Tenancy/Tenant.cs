@@ -33,13 +33,40 @@ public sealed class Tenant
         Name = name.Trim();
     }
 
-    public void Suspend() => Status = TenantStatus.Suspended;
+    public void Suspend()
+    {
+        if (Status is not TenantStatus.Active)
+        {
+            throw new InvalidOperationException("Only an active tenant can be suspended.");
+        }
 
-    public void Activate() => Status = TenantStatus.Active;
+        Status = TenantStatus.Suspended;
+    }
+
+    public void Reactivate()
+    {
+        if (Status is not TenantStatus.Suspended)
+        {
+            throw new InvalidOperationException("Only a suspended tenant can be reactivated.");
+        }
+
+        Status = TenantStatus.Active;
+    }
+
+    public void Deactivate()
+    {
+        if (Status is TenantStatus.Deactivated)
+        {
+            throw new InvalidOperationException("The tenant is already deactivated.");
+        }
+
+        Status = TenantStatus.Deactivated;
+    }
 }
 
 public enum TenantStatus
 {
     Active = 1,
     Suspended = 2,
+    Deactivated = 3,
 }
