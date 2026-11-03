@@ -10,6 +10,7 @@ public sealed class SmtpEmailSettings
         string fromAddress,
         string fromName,
         Uri activationUrl,
+        Uri commercialOnboardingUrl,
         Uri passwordRecoveryUrl)
     {
         Host = host;
@@ -19,6 +20,7 @@ public sealed class SmtpEmailSettings
         FromAddress = fromAddress;
         FromName = fromName;
         ActivationUrl = activationUrl;
+        CommercialOnboardingUrl = commercialOnboardingUrl;
         PasswordRecoveryUrl = passwordRecoveryUrl;
     }
 
@@ -29,5 +31,6 @@ public sealed class SmtpEmailSettings
     public string FromAddress { get; }
     public string FromName { get; }
     public Uri ActivationUrl { get; }
+    public Uri CommercialOnboardingUrl { get; }
     public Uri PasswordRecoveryUrl { get; }
 }

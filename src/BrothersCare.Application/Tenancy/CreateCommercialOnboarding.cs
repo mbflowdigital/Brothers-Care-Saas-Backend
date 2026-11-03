@@ -9,7 +9,7 @@ namespace BrothersCare.Application.Tenancy;
 public sealed class CreateCommercialOnboarding(
     ICommercialOnboardingStore store,
     ITokenGenerator tokenGenerator,
-    IInvitationSender? invitationSender,
+    ICommercialOnboardingSender? invitationSender,
     TimeProvider timeProvider)
 {
     public async Task<CommercialOnboardingResult> ExecuteAsync(

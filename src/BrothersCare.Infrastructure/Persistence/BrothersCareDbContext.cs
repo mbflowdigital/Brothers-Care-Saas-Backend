@@ -72,6 +72,9 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.Property(item => item.Id).ValueGeneratedNever();
         entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
         entity.Property(item => item.Cnpj).HasMaxLength(14);
+        entity.Property(item => item.LegalName).HasMaxLength(200);
+        entity.Property(item => item.CommercialEmail).HasMaxLength(320);
+        entity.Property(item => item.Phone).HasMaxLength(11);
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
         entity.HasIndex(item => item.Status);
         entity.HasIndex(item => item.Cnpj).IsUnique().HasFilter("[Cnpj] IS NOT NULL");
@@ -99,7 +102,18 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.ToTable("clinic_units");
         ConfigureTenantScopedKey(entity);
         entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
+        entity.Property(item => item.PostalCode).HasMaxLength(8);
+        entity.Property(item => item.Street).HasMaxLength(200);
+        entity.Property(item => item.Number).HasMaxLength(20);
+        entity.Property(item => item.Complement).HasMaxLength(100);
+        entity.Property(item => item.District).HasMaxLength(100);
+        entity.Property(item => item.City).HasMaxLength(100);
+        entity.Property(item => item.State).HasMaxLength(2);
+        entity.Property(item => item.Phone).HasMaxLength(11);
         entity.HasIndex(item => new { item.TenantId, item.Name }).IsUnique();
+        entity.HasIndex(item => item.TenantId, "UX_clinic_units_default_per_tenant")
+            .IsUnique()
+            .HasFilter("[IsDefault] = 1");
         entity.HasOne<Tenant>()
             .WithMany()
             .HasForeignKey(item => item.TenantId)

@@ -153,6 +153,11 @@ public static class ClinicUnitEndpoints
                 "Unidade não encontrada.", "resource-not-found"),
             ClinicUnitOperationStatus.NameAlreadyExists => AuthenticationProblems.Create(context, StatusCodes.Status409Conflict,
                 "Já existe uma unidade com este nome nesta empresa.", "duplicate-clinic-unit-name"),
+            ClinicUnitOperationStatus.DefaultUnitCannotBeDeactivated => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status409Conflict,
+                "Defina outra unidade como padrão antes de desativar esta unidade.",
+                "default-clinic-unit-cannot-be-deactivated"),
             ClinicUnitOperationStatus.AlreadyInactive => AuthenticationProblems.Create(context, StatusCodes.Status409Conflict,
                 "A unidade já está desativada.", "invalid-state-transition"),
             _ => AuthenticationProblems.Create(context, StatusCodes.Status400BadRequest,

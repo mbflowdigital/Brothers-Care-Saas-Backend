@@ -1,16 +1,29 @@
 using System.Net;
 using System.Net.Mail;
 using BrothersCare.Application.Identity.Contracts;
+using BrothersCare.Application.Tenancy.Contracts;
 using Microsoft.AspNetCore.WebUtilities;
 
 namespace BrothersCare.Infrastructure.Email;
 
-public sealed class SmtpEmailSender(SmtpEmailSettings settings) : IInvitationSender, IPasswordRecoverySender
+public sealed class SmtpEmailSender(SmtpEmailSettings settings) :
+    IInvitationSender,
+    ICommercialOnboardingSender,
+    IPasswordRecoverySender
 {
-    public async Task SendAsync(InvitationDelivery invitation, CancellationToken cancellationToken)
+    Task IInvitationSender.SendAsync(InvitationDelivery invitation, CancellationToken cancellationToken) =>
+        SendInvitationAsync(invitation, settings.ActivationUrl, cancellationToken);
+
+    Task ICommercialOnboardingSender.SendAsync(InvitationDelivery invitation, CancellationToken cancellationToken) =>
+        SendInvitationAsync(invitation, settings.CommercialOnboardingUrl, cancellationToken);
+
+    private async Task SendInvitationAsync(
+        InvitationDelivery invitation,
+        Uri destinationUrl,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(invitation);
-        var link = AddToken(settings.ActivationUrl, invitation.Token);
+        var link = AddToken(destinationUrl, invitation.Token);
         var name = WebUtility.HtmlEncode(invitation.DisplayName);
         var tenant = WebUtility.HtmlEncode(invitation.TenantName);
         var body = $"""

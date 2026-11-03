@@ -6,6 +6,8 @@ using BrothersCare.Application.Identity.Login;
 using BrothersCare.Application.Identity.PasswordChange;
 using BrothersCare.Application.Identity.PasswordRecovery;
 using BrothersCare.Application.Identity.Sessions;
+using BrothersCare.Application.Onboarding;
+using BrothersCare.Application.Onboarding.Contracts;
 using BrothersCare.Application.Tenancy;
 using BrothersCare.Application.Tenancy.Contracts;
 using BrothersCare.Infrastructure.Email;
@@ -59,17 +61,21 @@ public static class DependencyInjection
                 provider.GetRequiredService<AuthenticationSettings>(),
                 provider.GetService<IPasswordRecoverySender>()));
             services.TryAddSingleton<ITokenGenerator, InvitationTokenService>();
+            services.AddScoped<ICommercialOnboardingSource, SqlCommercialOnboardingSource>();
+            services.AddScoped<GetOnboardingContext>();
+            services.AddScoped<IOnboardingCompletionStore, SqlOnboardingCompletionStore>();
+            services.AddScoped<CompleteOnboarding>();
             services.AddScoped<ITenantProvisioningStore, SqlTenantProvisioningStore>();
             services.AddScoped<ICommercialOnboardingStore, SqlCommercialOnboardingStore>();
             services.AddScoped(provider => new CreateCommercialOnboarding(
                 provider.GetRequiredService<ICommercialOnboardingStore>(),
                 provider.GetRequiredService<ITokenGenerator>(),
-                provider.GetService<IInvitationSender>(),
+                provider.GetService<ICommercialOnboardingSender>(),
                 provider.GetRequiredService<TimeProvider>()));
             services.AddScoped(provider => new ResendCommercialOnboardingInvitation(
                 provider.GetRequiredService<ICommercialOnboardingStore>(),
                 provider.GetRequiredService<ITokenGenerator>(),
-                provider.GetService<IInvitationSender>(),
+                provider.GetService<ICommercialOnboardingSender>(),
                 provider.GetRequiredService<TimeProvider>()));
             services.AddScoped<ITenantListStore, SqlTenantListStore>();
             services.AddScoped<ListTenants>();
@@ -126,6 +132,7 @@ public static class DependencyInjection
         var fromName = section["FromName"];
         var port = section.GetValue<int?>("Port") ?? 587;
         var activationUrl = configuration["Email:Links:ActivationUrl"];
+        var commercialOnboardingUrl = configuration["Email:Links:CommercialOnboardingUrl"];
         var passwordRecoveryUrl = configuration["Email:Links:PasswordRecoveryUrl"];
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(host)) errors.Add("Email:Smtp:Host");
@@ -136,6 +143,8 @@ public static class DependencyInjection
         if (port is < 1 or > 65535) errors.Add("Email:Smtp:Port");
         if (!Uri.TryCreate(activationUrl, UriKind.Absolute, out var activationUri) ||
             activationUri.Scheme is not ("https" or "http")) errors.Add("Email:Links:ActivationUrl");
+        if (!Uri.TryCreate(commercialOnboardingUrl, UriKind.Absolute, out var commercialOnboardingUri) ||
+            commercialOnboardingUri.Scheme is not ("https" or "http")) errors.Add("Email:Links:CommercialOnboardingUrl");
         if (!Uri.TryCreate(passwordRecoveryUrl, UriKind.Absolute, out var recoveryUri) ||
             recoveryUri.Scheme is not ("https" or "http")) errors.Add("Email:Links:PasswordRecoveryUrl");
 
@@ -145,9 +154,10 @@ public static class DependencyInjection
         }
 
         services.AddSingleton(new SmtpEmailSettings(
-            host!, port, userName!, password!, fromAddress!, fromName!, activationUri!, recoveryUri!));
+            host!, port, userName!, password!, fromAddress!, fromName!, activationUri!, commercialOnboardingUri!, recoveryUri!));
         services.AddScoped<SmtpEmailSender>();
         services.AddScoped<IInvitationSender>(provider => provider.GetRequiredService<SmtpEmailSender>());
+        services.AddScoped<ICommercialOnboardingSender>(provider => provider.GetRequiredService<SmtpEmailSender>());
         services.AddScoped<IPasswordRecoverySender>(provider => provider.GetRequiredService<SmtpEmailSender>());
     }
 }

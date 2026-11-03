@@ -40,6 +40,11 @@ public sealed class ManageClinicUnits(
             return new(ClinicUnitOperationStatus.AlreadyInactive);
         }
 
+        if (unit.IsDefault)
+        {
+            return new(ClinicUnitOperationStatus.DefaultUnitCannotBeDeactivated);
+        }
+
         var appointments = await transaction.FindFutureScheduledAppointmentsAsync(
             context.TenantId.Value,
             clinicUnitId,
@@ -191,6 +196,7 @@ public enum ClinicUnitOperationStatus
     InvalidInput = 5,
     NameAlreadyExists = 6,
     AlreadyInactive = 7,
+    DefaultUnitCannotBeDeactivated = 8,
 }
 
 public sealed record ClinicUnitItem(Guid Id, string Name, bool IsActive, DateTimeOffset CreatedAt);

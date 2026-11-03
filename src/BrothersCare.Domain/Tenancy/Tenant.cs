@@ -1,3 +1,5 @@
+using System.Net.Mail;
+
 namespace BrothersCare.Domain.Tenancy;
 
 public sealed class Tenant
@@ -33,6 +35,12 @@ public sealed class Tenant
 
     public string? Cnpj { get; private set; }
 
+    public string? LegalName { get; private set; }
+
+    public string? CommercialEmail { get; private set; }
+
+    public string? Phone { get; private set; }
+
     public TenantStatus Status { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
@@ -44,6 +52,19 @@ public sealed class Tenant
     }
 
     public void SetCnpj(string cnpj) => Cnpj = NormalizeCnpj(cnpj);
+
+    public void CompleteProfile(string legalName, string tradeName, string commercialEmail, string phone)
+    {
+        var normalizedLegalName = NormalizeRequiredText(legalName, 200, nameof(legalName));
+        var normalizedTradeName = NormalizeRequiredText(tradeName, 200, nameof(tradeName));
+        var normalizedEmail = NormalizeEmail(commercialEmail);
+        var normalizedPhone = NormalizePhone(phone);
+
+        LegalName = normalizedLegalName;
+        Rename(normalizedTradeName);
+        CommercialEmail = normalizedEmail;
+        Phone = normalizedPhone;
+    }
 
     public static string NormalizeCnpj(string cnpj)
     {
@@ -89,6 +110,21 @@ public sealed class Tenant
         Status = TenantStatus.Active;
     }
 
+    public void CompleteOnboarding()
+    {
+        if (Status is not TenantStatus.PendingOnboarding)
+        {
+            throw new InvalidOperationException("Only a tenant pending onboarding can complete onboarding.");
+        }
+
+        if (Cnpj is null || LegalName is null || CommercialEmail is null || Phone is null)
+        {
+            throw new InvalidOperationException("The tenant profile must be complete before activation.");
+        }
+
+        Status = TenantStatus.Active;
+    }
+
     public void Deactivate()
     {
         if (Status is TenantStatus.Deactivated)
@@ -104,6 +140,47 @@ public sealed class Tenant
         var sum = value.Select((digit, index) => (digit - '0') * weights[index]).Sum();
         var remainder = sum % 11;
         return remainder < 2 ? '0' : (char)('0' + 11 - remainder);
+    }
+
+    private static string NormalizeRequiredText(string value, int maximumLength, string parameterName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value, parameterName);
+        var normalized = value.Trim();
+        if (normalized.Length > maximumLength)
+        {
+            throw new ArgumentException($"Value cannot exceed {maximumLength} characters.", parameterName);
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeEmail(string value)
+    {
+        var normalized = NormalizeRequiredText(value, 320, nameof(value));
+        if (!MailAddress.TryCreate(normalized, out var address) ||
+            !string.Equals(address.Address, normalized, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("Commercial email is invalid.", nameof(value));
+        }
+
+        return address.Address;
+    }
+
+    private static string NormalizePhone(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        if (value.Any(character => !char.IsDigit(character) && character is not ' ' and not '(' and not ')' and not '-' and not '+'))
+        {
+            throw new ArgumentException("Phone contains invalid characters.", nameof(value));
+        }
+
+        var digits = new string(value.Where(char.IsDigit).ToArray());
+        if (digits.Length is < 10 or > 11)
+        {
+            throw new ArgumentException("Phone must contain 10 or 11 digits.", nameof(value));
+        }
+
+        return digits;
     }
 }
 

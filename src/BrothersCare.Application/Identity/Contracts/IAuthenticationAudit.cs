@@ -16,4 +16,5 @@ public enum AuthenticationAuditEvent
     TenantCreated = 7,
     InvitationIssued = 8,
     InvitationReissued = 9,
+    OnboardingCompleted = 10,
 }

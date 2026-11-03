@@ -1,5 +1,6 @@
 using BrothersCare.Api.Identity;
 using BrothersCare.Api.Middleware;
+using BrothersCare.Api.Onboarding;
 using BrothersCare.Api.Tenancy;
 using BrothersCare.Application;
 using BrothersCare.Application.Identity;
@@ -157,6 +158,7 @@ app.MapTenantListEndpoints();
 app.MapTenantLifecycleEndpoints();
 app.MapClinicUnitEndpoints();
 app.MapInvitationEndpoints();
+app.MapOnboardingEndpoints();
 
 app.Run();
 

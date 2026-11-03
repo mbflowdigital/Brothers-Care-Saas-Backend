@@ -84,6 +84,18 @@ public sealed class TenantSchemaTests
         Assert.Equal(["UserId"], relationship.Properties.Select(property => property.Name));
     }
 
+    [Fact]
+    public void ClinicUnitAllowsOnlyOneDefaultPerTenant()
+    {
+        using var context = CreateContext();
+        var unit = context.Model.FindEntityType(typeof(ClinicUnit));
+        Assert.NotNull(unit);
+
+        Assert.Contains(unit.GetIndexes(), index =>
+            index.IsUnique && index.GetFilter() == "[IsDefault] = 1" &&
+            index.Properties.Select(property => property.Name).SequenceEqual(["TenantId"]));
+    }
+
     private static BrothersCareDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<BrothersCareDbContext>()

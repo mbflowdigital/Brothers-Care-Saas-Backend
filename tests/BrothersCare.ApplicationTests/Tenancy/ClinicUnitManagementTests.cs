@@ -89,6 +89,20 @@ public sealed class ClinicUnitManagementTests
         Assert.Equal(AppointmentStatus.Completed, completed.Status);
     }
 
+    [Fact]
+    public async Task DefaultUnitCannotBeDeactivated()
+    {
+        var scenario = CreateAdministratorScenario();
+        var unit = scenario.Store.Units[0];
+        unit.MarkAsDefault();
+
+        var result = await Service(scenario).DeactivateAsync(unit.Id, CancellationToken.None);
+
+        Assert.Equal(ClinicUnitOperationStatus.DefaultUnitCannotBeDeactivated, result.Status);
+        Assert.True(unit.IsActive);
+        Assert.True(unit.IsDefault);
+    }
+
     private static ManageClinicUnits Service(IdentityScenario scenario) => new(scenario, scenario.Store, scenario.Clock);
 
     private static IdentityScenario CreateAdministratorScenario()

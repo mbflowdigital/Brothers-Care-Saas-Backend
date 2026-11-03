@@ -8,7 +8,7 @@ namespace BrothersCare.Application.Tenancy;
 public sealed class ResendCommercialOnboardingInvitation(
     ICommercialOnboardingStore store,
     ITokenGenerator tokenGenerator,
-    IInvitationSender? invitationSender,
+    ICommercialOnboardingSender? invitationSender,
     TimeProvider timeProvider)
 {
     public async Task<CommercialOnboardingResendStatus> ExecuteAsync(Guid tenantId, CancellationToken cancellationToken)

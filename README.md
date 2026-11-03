@@ -110,6 +110,7 @@ $env:Email__Smtp__Password = "senha-da-caixa"
 $env:Email__Smtp__FromAddress = "noreply@brothersdigital.tec.br"
 $env:Email__Smtp__FromName = "Brothers Care"
 $env:Email__Links__ActivationUrl = "https://app.seu-dominio.com/ativar-conta"
+$env:Email__Links__CommercialOnboardingUrl = "https://app.seu-dominio.com/onboarding"
 $env:Email__Links__PasswordRecoveryUrl = "https://app.seu-dominio.com/recuperar-senha"
 ```
 

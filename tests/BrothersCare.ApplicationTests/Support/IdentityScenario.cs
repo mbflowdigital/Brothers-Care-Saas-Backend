@@ -2,12 +2,18 @@ using System.Security.Cryptography;
 using System.Globalization;
 using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Application.Identity.Sessions;
+using BrothersCare.Application.Tenancy.Contracts;
 using BrothersCare.Domain.Identity;
 using BrothersCare.Domain.Tenancy;
 
 namespace BrothersCare.ApplicationTests.Support;
 
-internal sealed class IdentityScenario : ICurrentPrincipalAccessor, IAuthenticationAudit, IInvitationSender, IPasswordRecoverySender
+internal sealed class IdentityScenario :
+    ICurrentPrincipalAccessor,
+    IAuthenticationAudit,
+    IInvitationSender,
+    ICommercialOnboardingSender,
+    IPasswordRecoverySender
 {
     private int cpfSequence;
     public IdentityMemoryStore Store { get; } = new();
