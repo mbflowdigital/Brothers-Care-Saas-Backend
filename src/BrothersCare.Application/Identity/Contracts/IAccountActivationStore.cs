@@ -16,7 +16,11 @@ public interface IAccountActivationTransaction : IAsyncDisposable
     Task<UserCredential?> FindCredentialAsync(Guid userId, CancellationToken cancellationToken);
     Task<TenantMembership?> FindInvitationAsync(Guid membershipId, Guid userId, CancellationToken cancellationToken);
     Task<bool> IsTenantActiveAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<Tenant?> FindTenantAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ActivationClinicUnit>> ListMembershipUnitsAsync(Guid tenantId, Guid membershipId, CancellationToken cancellationToken);
     void AddCredential(UserCredential credential);
     Task RevokeSessionsAsync(Guid userId, DateTimeOffset now, CancellationToken cancellationToken);
     Task CommitAsync(CancellationToken cancellationToken);
 }
+
+public sealed record ActivationClinicUnit(Guid Id, string Name);

@@ -72,9 +72,21 @@ public sealed class SqlTenantInvitationStore(BrothersCareDbContext dbContext) : 
                                select new { link.TenantMembershipId, unit.Id, unit.Name }).ToListAsync(cancellationToken);
             return rows.Select(item => new TenantTeamMember(
                 item.membership.Id, item.user.Id, item.user.DisplayName, item.user.Email,
-                item.membership.Role, item.membership.Status, item.membership.CreatedAt,
+                item.membership.Role.ToString(), item.membership.Status.ToString(), item.membership.CreatedAt,
                 units.Where(unit => unit.TenantMembershipId == item.membership.Id)
                     .Select(unit => new TenantTeamUnit(unit.Id, unit.Name)).ToArray())).ToArray();
+        }
+
+        public Task<int> CountActiveAdministratorsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+            context.TenantMemberships.CountAsync(item => item.TenantId == tenantId &&
+                item.Status == MembershipStatus.Active && item.Role == TenantMembershipRole.ClinicAdministrator, cancellationToken);
+
+        public async Task RevokeInvitationTokensAsync(Guid membershipId, DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            var tokens = await context.AccountActionTokens.Where(item => item.TenantMembershipId == membershipId &&
+                item.Purpose == AccountActionTokenPurpose.InvitationAcceptance && item.ConsumedAt == null && item.RevokedAt == null)
+                .ToListAsync(cancellationToken);
+            foreach (var token in tokens) token.Revoke(now);
         }
 
         public async Task<bool> AreUnitsActiveAsync(Guid tenantId, IReadOnlyList<Guid> unitIds, CancellationToken cancellationToken) =>

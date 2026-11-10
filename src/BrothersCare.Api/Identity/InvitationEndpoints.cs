@@ -33,11 +33,54 @@ public static class InvitationEndpoints
             .Produces<IReadOnlyList<TenantTeamMemberResponse>>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden);
+        endpoints.MapPatch("/api/v1/team-members/{membershipId:guid}", UpdateAsync)
+            .RequireAuthorization(IdentityPolicies.ClinicAdministrator)
+            .WithTags("Equipe").WithName("UpdateTenantTeamMember")
+            .WithSummary("Altera perfil e unidades de uma pessoa da equipe.")
+            .Produces(StatusCodes.Status204NoContent);
+        endpoints.MapPost("/api/v1/team-members/{membershipId:guid}/deactivation", DeactivateAsync)
+            .RequireAuthorization(IdentityPolicies.ClinicAdministrator)
+            .WithTags("Equipe").WithName("DeactivateTenantTeamMember")
+            .WithSummary("Revoga o acesso preservando o histórico da pessoa.")
+            .Produces(StatusCodes.Status204NoContent);
         return endpoints;
     }
 
+    private static async Task<Results<NoContent, ProblemHttpResult>> UpdateAsync(
+        Guid membershipId, [FromBody] UpdateTenantTeamMemberRequest? request,
+        [FromServices] ManageTenantTeam manageTenantTeam, HttpContext context, CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (request?.Role is null || request.ClinicUnitIds is null)
+            return TeamProblem(context, TenantTeamMutationStatus.InvalidInput);
+        var result = await manageTenantTeam.UpdateAsync(membershipId, request.Role, request.ClinicUnitIds, cancellationToken);
+        return result == TenantTeamMutationStatus.Success ? TypedResults.NoContent() : TeamProblem(context, result);
+    }
+
+    private static async Task<Results<NoContent, ProblemHttpResult>> DeactivateAsync(
+        Guid membershipId, [FromServices] ManageTenantTeam manageTenantTeam,
+        HttpContext context, CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var result = await manageTenantTeam.DeactivateAsync(membershipId, cancellationToken);
+        return result == TenantTeamMutationStatus.Success ? TypedResults.NoContent() : TeamProblem(context, result);
+    }
+
+    private static ProblemHttpResult TeamProblem(HttpContext context, TenantTeamMutationStatus status) => status switch
+    {
+        TenantTeamMutationStatus.Unauthenticated => AuthenticationProblems.Create(context, 401, "Sessão ausente, inválida ou expirada.", "authentication-required"),
+        TenantTeamMutationStatus.Forbidden => AuthenticationProblems.Create(context, 403, "Você não tem permissão para administrar esta pessoa.", "forbidden"),
+        TenantTeamMutationStatus.NotFound => AuthenticationProblems.Create(context, 404, "Pessoa não encontrada nesta equipe.", "not-found"),
+        TenantTeamMutationStatus.UnitNotFound => AuthenticationProblems.Create(context, 404, "Uma das unidades selecionadas não está disponível.", "unit-not-found"),
+        TenantTeamMutationStatus.CannotDeactivateSelf => AuthenticationProblems.Create(context, 409, "Para sua segurança, você não pode desativar o próprio acesso.", "cannot-deactivate-self"),
+        TenantTeamMutationStatus.LastAdministrator => AuthenticationProblems.Create(context, 409, "Mantenha ao menos um administrador ativo na clínica.", "last-administrator"),
+        TenantTeamMutationStatus.InvalidState => AuthenticationProblems.Create(context, 409, "O acesso atual não permite esta alteração.", "invalid-state"),
+        _ => AuthenticationProblems.Create(context, 400, "Revise o perfil e as unidades selecionadas.", "validation"),
+    };
+
     private static async Task<Results<Ok<IReadOnlyList<TenantTeamMemberResponse>>, ProblemHttpResult>> ListAsync(
         [FromServices] ListTenantTeam listTenantTeam,
+        [FromServices] ICurrentPrincipalAccessor principalAccessor,
         HttpContext context,
         CancellationToken cancellationToken)
     {
@@ -47,8 +90,9 @@ public static class InvitationEndpoints
         {
             TenantTeamStatus.Success => TypedResults.Ok<IReadOnlyList<TenantTeamMemberResponse>>(result.Items.Select(item =>
                 new TenantTeamMemberResponse(item.MembershipId, item.UserId, item.DisplayName, item.Email,
-                    item.Role.ToString(), item.Status.ToString(), item.CreatedAt,
-                    item.Units.Select(unit => new TenantTeamUnitResponse(unit.Id, unit.Name)).ToArray())).ToArray()),
+                    item.Role, item.Status, item.CreatedAt,
+                    item.Units.Select(unit => new TenantTeamUnitResponse(unit.Id, unit.Name)).ToArray(),
+                    item.UserId == principalAccessor.Principal?.UserId)).ToArray()),
             TenantTeamStatus.Forbidden => AuthenticationProblems.Create(context, StatusCodes.Status403Forbidden,
                 "Você não tem permissão para consultar a equipe desta empresa.", "forbidden"),
             _ => AuthenticationProblems.Create(context, StatusCodes.Status401Unauthorized,
@@ -104,6 +148,9 @@ public sealed record InviteTenantUserHttpRequest(string? Email, string? DisplayN
     public override string ToString() => "[REDACTED]";
 }
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record UpdateTenantTeamMemberRequest(string? Role, Guid[]? ClinicUnitIds);
+
 public sealed record TenantTeamMemberResponse(
     Guid MembershipId,
     Guid UserId,
@@ -112,6 +159,7 @@ public sealed record TenantTeamMemberResponse(
     string Role,
     string Status,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<TenantTeamUnitResponse> Units);
+    IReadOnlyList<TenantTeamUnitResponse> Units,
+    bool IsCurrentUser);
 
 public sealed record TenantTeamUnitResponse(Guid Id, string Name);

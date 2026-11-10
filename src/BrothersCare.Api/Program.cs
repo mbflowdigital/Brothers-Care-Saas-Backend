@@ -169,6 +169,7 @@ app.MapTenantEndpoints();
 app.MapTenantListEndpoints();
 app.MapTenantLifecycleEndpoints();
 app.MapClinicUnitEndpoints();
+app.MapTenantWorkspaceEndpoints();
 app.MapInvitationEndpoints();
 app.MapOnboardingEndpoints();
 

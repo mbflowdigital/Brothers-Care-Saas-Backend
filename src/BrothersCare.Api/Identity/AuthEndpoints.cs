@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json.Serialization;
 using BrothersCare.Application.Identity;
 using BrothersCare.Application.Identity.Contracts;
+using BrothersCare.Application.Identity.Activation;
 using BrothersCare.Application.Identity.Login;
 using BrothersCare.Application.Identity.Sessions;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -38,8 +39,27 @@ public static class AuthEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status429TooManyRequests);
+        group.MapPost("/invitation-context", InvitationContextAsync)
+            .AllowAnonymous()
+            .WithName("GetInvitationContext")
+            .WithSummary("Exibe o contexto mínimo de um convite válido antes da ativação.")
+            .Produces<InvitationContext>()
+            .ProducesProblem(StatusCodes.Status400BadRequest);
 
         return endpoints;
+    }
+
+    private static async Task<Results<Ok<InvitationContext>, ProblemHttpResult>> InvitationContextAsync(
+        [FromBody] InvitationContextHttpRequest? request,
+        [FromServices] GetInvitationContext getInvitationContext,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var result = string.IsNullOrWhiteSpace(request?.Token) ? null :
+            await getInvitationContext.ExecuteAsync(request.Token, cancellationToken);
+        return result is not null ? TypedResults.Ok(result) : AuthenticationProblems.Create(context, 400,
+            "Este convite é inválido, expirou ou já foi utilizado.", "invitation-invalid");
     }
 
     private static async Task<Results<Ok<SessionSummary>, ProblemHttpResult>> LoginAsync(
@@ -189,6 +209,12 @@ public sealed record AccountActivationHttpRequest(
     string? Password,
     string? PasswordConfirmation,
     string? Cpf)
+{
+    public override string ToString() => "[REDACTED]";
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record InvitationContextHttpRequest(string? Token)
 {
     public override string ToString() => "[REDACTED]";
 }

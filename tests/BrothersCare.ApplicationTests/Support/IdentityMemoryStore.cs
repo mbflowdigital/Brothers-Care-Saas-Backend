@@ -155,6 +155,22 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
                                              select unit.Id).ToArray());
     public Task<IReadOnlyList<Guid>> GetMembershipUnitIdsAsync(Guid tenantId, Guid membershipId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Guid>>(UnitMemberships.Where(item => item.TenantId == tenantId && item.TenantMembershipId == membershipId).Select(item => item.ClinicUnitId).ToArray());
+    public Task<IReadOnlyList<ActivationClinicUnit>> ListMembershipUnitsAsync(Guid tenantId, Guid membershipId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ActivationClinicUnit>>((from link in UnitMemberships
+            join unit in Units on link.ClinicUnitId equals unit.Id
+            where link.TenantId == tenantId && link.TenantMembershipId == membershipId && unit.TenantId == tenantId && unit.IsActive
+            select new ActivationClinicUnit(unit.Id, unit.Name)).ToArray());
+    public Task<IReadOnlyList<TenantTeamMember>> ListMembersAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TenantTeamMember>>((from membership in Memberships
+            join user in Users on membership.UserId equals user.Id
+            where membership.TenantId == tenantId
+            select new TenantTeamMember(membership.Id, user.Id, user.DisplayName, user.Email,
+                membership.Role.ToString(), membership.Status.ToString(), membership.CreatedAt,
+                (from link in UnitMemberships join unit in Units on link.ClinicUnitId equals unit.Id
+                 where link.TenantId == tenantId && link.TenantMembershipId == membership.Id
+                 select new TenantTeamUnit(unit.Id, unit.Name)).ToArray())).ToArray());
+    public Task<int> CountActiveAdministratorsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        Task.FromResult(Memberships.Count(item => item.TenantId == tenantId && item.Status == MembershipStatus.Active && item.Role == TenantMembershipRole.ClinicAdministrator));
     public Task<bool> AreUnitsActiveAsync(Guid tenantId, IReadOnlyList<Guid> unitIds, CancellationToken cancellationToken) => Task.FromResult(unitIds.All(id => Units.Any(item => item.Id == id && item.TenantId == tenantId && item.IsActive)));
     public Task<MembershipStatus?> FindMembershipStatusAsync(Guid tenantId, Guid membershipId, CancellationToken cancellationToken) => Task.FromResult(Memberships.Where(item => item.TenantId == tenantId && item.Id == membershipId).Select(item => (MembershipStatus?)item.Status).SingleOrDefault());
     public Task<int> CountMembershipsAsync(Guid tenantId, IReadOnlyList<MembershipStatus> statuses, CancellationToken cancellationToken) => Task.FromResult(Memberships.Count(item => item.TenantId == tenantId && statuses.Contains(item.Status)));
@@ -208,6 +224,8 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     }
 
     public Task RevokePreviousInvitationsAsync(Guid membershipId, DateTimeOffset now, CancellationToken cancellationToken) =>
+        RevokeTokensAsync(item => item.TenantMembershipId == membershipId && item.Purpose == AccountActionTokenPurpose.InvitationAcceptance, now);
+    public Task RevokeInvitationTokensAsync(Guid membershipId, DateTimeOffset now, CancellationToken cancellationToken) =>
         RevokeTokensAsync(item => item.TenantMembershipId == membershipId && item.Purpose == AccountActionTokenPurpose.InvitationAcceptance, now);
     public Task RevokeOnboardingTokensAsync(Guid membershipId, DateTimeOffset now, CancellationToken cancellationToken) =>
         RevokeTokensAsync(item => item.TenantMembershipId == membershipId && item.Purpose == AccountActionTokenPurpose.CommercialOnboarding, now);

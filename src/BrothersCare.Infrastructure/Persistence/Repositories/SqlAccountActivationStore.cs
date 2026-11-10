@@ -42,6 +42,18 @@ public sealed class SqlAccountActivationStore(BrothersCareDbContext dbContext) :
         public Task<bool> IsTenantActiveAsync(Guid tenantId, CancellationToken cancellationToken) =>
             context.Tenants.AnyAsync(item => item.Id == tenantId && item.Status == TenantStatus.Active, cancellationToken);
 
+        public Task<Tenant?> FindTenantAsync(Guid tenantId, CancellationToken cancellationToken) =>
+            context.Tenants.AsNoTracking().SingleOrDefaultAsync(item => item.Id == tenantId, cancellationToken);
+
+        public async Task<IReadOnlyList<ActivationClinicUnit>> ListMembershipUnitsAsync(
+            Guid tenantId, Guid membershipId, CancellationToken cancellationToken) =>
+            await (from link in context.ClinicUnitMemberships.AsNoTracking()
+                   join unit in context.ClinicUnits.AsNoTracking()
+                       on new { link.TenantId, UnitId = link.ClinicUnitId } equals new { unit.TenantId, UnitId = unit.Id }
+                   where link.TenantId == tenantId && link.TenantMembershipId == membershipId && unit.IsActive
+                   orderby unit.Name
+                   select new ActivationClinicUnit(unit.Id, unit.Name)).ToListAsync(cancellationToken);
+
         public void AddCredential(UserCredential credential) => context.UserCredentials.Add(credential);
 
         public async Task RevokeSessionsAsync(Guid userId, DateTimeOffset now, CancellationToken cancellationToken)
