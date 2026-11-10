@@ -31,8 +31,22 @@ public static class CommercialOnboardingEndpoints
             .Produces(StatusCodes.Status202Accepted)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
+        var preRegistrations = endpoints.MapGroup("/api/v1/tenant-pre-registrations")
+            .RequireAuthorization(IdentityPolicies.SuperAdministrator)
+            .WithTags("Pré-cadastros de empresas");
+        preRegistrations.MapPost("", CreatePreRegistrationAsync).WithName("CreateTenantPreRegistration");
+        preRegistrations.MapGet("/{tenantId:guid}", GetPreRegistrationAsync).WithName("GetTenantPreRegistration");
+        preRegistrations.MapPut("/{tenantId:guid}", UpdatePreRegistrationAsync).WithName("UpdateTenantPreRegistration");
+        preRegistrations.MapDelete("/{tenantId:guid}", CancelPreRegistrationAsync).WithName("CancelTenantPreRegistration");
+        preRegistrations.MapPost("/{tenantId:guid}/resend", ResendProtectedAsync).WithName("ResendTenantPreRegistration");
         return endpoints;
     }
+
+    private static Task<Results<Created<CommercialOnboardingResponse>, ProblemHttpResult>> CreatePreRegistrationAsync(
+        [FromBody] CommercialOnboardingHttpRequest? request,
+        [FromServices] CreateCommercialOnboarding createCommercialOnboarding,
+        HttpContext context,
+        CancellationToken cancellationToken) => CreateCoreAsync(request, createCommercialOnboarding, context, cancellationToken);
 
     private static async Task<Results<Created<CommercialOnboardingResponse>, ProblemHttpResult>> CreateAsync(
         [FromBody] CommercialOnboardingHttpRequest? request,
@@ -49,6 +63,21 @@ public static class CommercialOnboardingEndpoints
                 "Recurso não encontrado.", "not-found");
         }
 
+        if (request is null)
+        {
+            return AuthenticationProblems.Create(context, StatusCodes.Status400BadRequest,
+                "Informe os dados da empresa e da pessoa responsável.", "validation");
+        }
+
+        return await CreateCoreAsync(request, createCommercialOnboarding, context, cancellationToken);
+    }
+
+    private static async Task<Results<Created<CommercialOnboardingResponse>, ProblemHttpResult>> CreateCoreAsync(
+        CommercialOnboardingHttpRequest? request,
+        CreateCommercialOnboarding createCommercialOnboarding,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
         if (request is null)
         {
             return AuthenticationProblems.Create(context, StatusCodes.Status400BadRequest,
@@ -76,6 +105,50 @@ public static class CommercialOnboardingEndpoints
         };
     }
 
+    private static async Task<Results<Ok<TenantPreRegistrationDetails>, ProblemHttpResult>> GetPreRegistrationAsync(
+        Guid tenantId, [FromServices] ManageTenantPreRegistration manager, HttpContext context, CancellationToken cancellationToken)
+    {
+        var item = await manager.GetAsync(tenantId, cancellationToken);
+        return item is null
+            ? AuthenticationProblems.Create(context, StatusCodes.Status404NotFound, "Pré-cadastro não encontrado.", "not-found")
+            : TypedResults.Ok(item);
+    }
+
+    private static async Task<Results<NoContent, ProblemHttpResult>> UpdatePreRegistrationAsync(
+        Guid tenantId, [FromBody] CommercialOnboardingHttpRequest? request,
+        [FromServices] ManageTenantPreRegistration manager, HttpContext context, CancellationToken cancellationToken)
+    {
+        if (request is null) return AuthenticationProblems.Create(context, 400, "Informe os dados do pré-cadastro.", "validation");
+        var status = await manager.UpdateAsync(tenantId, new TenantPreRegistrationInput(
+            request.CompanyName ?? string.Empty, request.Cnpj ?? string.Empty,
+            request.ResponsibleName ?? string.Empty, request.ResponsibleEmail ?? string.Empty), cancellationToken);
+        return status switch
+        {
+            TenantPreRegistrationStatus.Completed => TypedResults.NoContent(),
+            TenantPreRegistrationStatus.NotFound => AuthenticationProblems.Create(context, 404, "Pré-cadastro não encontrado.", "not-found"),
+            TenantPreRegistrationStatus.InvalidState => AuthenticationProblems.Create(context, 409, "Somente pré-cadastros pendentes podem ser editados.", "invalid-state"),
+            TenantPreRegistrationStatus.CnpjAlreadyRegistered => AuthenticationProblems.Create(context, 409, "Já existe uma empresa cadastrada com este CNPJ.", "cnpj-already-registered"),
+            _ => AuthenticationProblems.Create(context, 400, "Revise os dados do pré-cadastro.", "validation"),
+        };
+    }
+
+    private static async Task<Results<NoContent, ProblemHttpResult>> CancelPreRegistrationAsync(
+        Guid tenantId, [FromServices] ManageTenantPreRegistration manager, HttpContext context, CancellationToken cancellationToken)
+    {
+        var status = await manager.CancelAsync(tenantId, cancellationToken);
+        return status switch
+        {
+            TenantPreRegistrationStatus.Completed => TypedResults.NoContent(),
+            TenantPreRegistrationStatus.NotFound => AuthenticationProblems.Create(context, 404, "Pré-cadastro não encontrado.", "not-found"),
+            _ => AuthenticationProblems.Create(context, 409, "Somente pré-cadastros pendentes podem ser cancelados.", "invalid-state"),
+        };
+    }
+
+    private static Task<Results<Accepted, ProblemHttpResult>> ResendProtectedAsync(
+        Guid tenantId, [FromServices] ResendCommercialOnboardingInvitation resendInvitation,
+        HttpContext context, CancellationToken cancellationToken) =>
+        ResendCoreAsync(tenantId, resendInvitation, context, cancellationToken);
+
     private static async Task<Results<Accepted, ProblemHttpResult>> ResendAsync(
         Guid tenantId,
         [FromServices] ResendCommercialOnboardingInvitation resendInvitation,
@@ -91,6 +164,13 @@ public static class CommercialOnboardingEndpoints
                 "Recurso não encontrado.", "not-found");
         }
 
+        return await ResendCoreAsync(tenantId, resendInvitation, context, cancellationToken);
+    }
+
+    private static async Task<Results<Accepted, ProblemHttpResult>> ResendCoreAsync(
+        Guid tenantId, ResendCommercialOnboardingInvitation resendInvitation,
+        HttpContext context, CancellationToken cancellationToken)
+    {
         var status = await resendInvitation.ExecuteAsync(tenantId, cancellationToken);
         return status switch
         {

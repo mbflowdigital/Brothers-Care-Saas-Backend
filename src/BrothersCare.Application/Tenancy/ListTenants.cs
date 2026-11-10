@@ -7,7 +7,9 @@ public interface ITenantListStore
     Task<TenantDetails?> GetAsync(Guid tenantId, CancellationToken cancellationToken);
 }
 
-public sealed record TenantListItem(Guid Id, string Name, string Status, string FirstAdministratorStatus);
+public sealed record TenantListItem(
+    Guid Id, string Name, string? Cnpj, string Status, string FirstAdministratorStatus,
+    string? ResponsibleName, string? ResponsibleEmail);
 
 public sealed record TenantDetails(
     Guid Id,

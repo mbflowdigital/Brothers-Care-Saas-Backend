@@ -80,6 +80,8 @@ public static class DependencyInjection
             services.AddScoped<ITenantListStore, SqlTenantListStore>();
             services.AddScoped<ListTenants>();
             services.AddScoped<GetTenant>();
+            services.AddScoped<ITenantPreRegistrationStore, SqlTenantPreRegistrationStore>();
+            services.AddScoped<ManageTenantPreRegistration>();
             services.AddScoped<ITenantLifecycleStore, SqlTenantLifecycleStore>();
             services.AddScoped<ChangeTenantLifecycle>();
             services.AddScoped<IClinicUnitStore, SqlClinicUnitStore>();

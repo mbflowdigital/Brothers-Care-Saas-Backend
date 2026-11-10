@@ -59,6 +59,13 @@ public static class AuthEndpoints
         }
 
         var cpf = request?.Cpf;
+        var fixedAdministrator = configuration.GetSection("DevelopmentSuperAdministrator");
+        if (context.RequestServices.GetRequiredService<IHostEnvironment>().IsDevelopment() &&
+            fixedAdministrator.GetValue("Enabled", false) &&
+            string.Equals(cpf, fixedAdministrator["UserName"], StringComparison.Ordinal))
+        {
+            cpf = fixedAdministrator["Cpf"];
+        }
         var rateLimitKey = NormalizeCpfForRateLimit(cpf);
         var retryAfter = rateLimiter.GetRetryAfterSeconds(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -76,7 +83,7 @@ public static class AuthEndpoints
                 "Informe um CPF e uma senha válidos.", "validation");
         }
 
-        var result = await login.ExecuteAsync(new LoginCommand(request.Cpf, request.Password), cancellationToken);
+        var result = await login.ExecuteAsync(new LoginCommand(cpf!, request.Password), cancellationToken);
         if (result.Status == LoginStatus.InvalidInput)
         {
             return AuthenticationProblems.Create(context, StatusCodes.Status400BadRequest,

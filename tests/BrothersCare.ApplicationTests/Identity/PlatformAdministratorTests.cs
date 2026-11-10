@@ -15,7 +15,7 @@ public sealed class PlatformAdministratorTests
     public async Task BootstrapIsIdempotentAndCreatesOnlyGlobalPendingIdentity()
     {
         var scenario = new IdentityScenario();
-        var bootstrap = new PlatformAdministratorBootstrapper(scenario.Store, scenario.Clock, scenario);
+        var bootstrap = new PlatformAdministratorBootstrapper(scenario.Store, scenario.Clock, scenario, scenario.Hasher);
         var request = new PlatformAdministratorBootstrapRequest(" GLOBAL@EXAMPLE.INVALID ", "Operador de teste");
         Assert.True((await bootstrap.EnsureSuperAdministratorAsync(request, CancellationToken.None)).Created);
         Assert.False((await bootstrap.EnsureSuperAdministratorAsync(request, CancellationToken.None)).Created);
@@ -38,7 +38,7 @@ public sealed class PlatformAdministratorTests
         var admin = new PlatformAdministrator(Guid.NewGuid(), user.Id, PlatformAdministratorRole.SuperAdministrator, scenario.Clock.GetUtcNow());
         admin.Deactivate();
         scenario.Store.Administrators.Add(admin);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => new PlatformAdministratorBootstrapper(scenario.Store, scenario.Clock, scenario)
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new PlatformAdministratorBootstrapper(scenario.Store, scenario.Clock, scenario, scenario.Hasher)
             .EnsureSuperAdministratorAsync(new PlatformAdministratorBootstrapRequest(user.Email, "Nome diferente"), CancellationToken.None));
         Assert.Equal(hash, Assert.Single(scenario.Store.Credentials).PasswordHash);
         Assert.Equal(PlatformAdministratorStatus.Inactive, admin.Status);
@@ -93,7 +93,7 @@ public sealed class PlatformAdministratorTests
     public async Task BootstrappedSuperAdministratorCanActivateAndLoginWithoutClinicalAccess()
     {
         var scenario = new IdentityScenario();
-        await new PlatformAdministratorBootstrapper(scenario.Store, scenario.Clock, scenario).EnsureSuperAdministratorAsync(
+        await new PlatformAdministratorBootstrapper(scenario.Store, scenario.Clock, scenario, scenario.Hasher).EnsureSuperAdministratorAsync(
             new PlatformAdministratorBootstrapRequest("global@example.invalid", "Operador de teste"), CancellationToken.None);
         var issued = await new PlatformAdministratorActivationTokenIssuer(scenario.Store, scenario.Clock, scenario.Tokens).IssueAsync(
             new PlatformAdministratorActivationTokenIssueRequest("global@example.invalid", TimeSpan.FromMinutes(30)), CancellationToken.None);

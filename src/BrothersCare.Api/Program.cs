@@ -56,12 +56,24 @@ if (allowedOrigins.Length > 0)
         options.AddDefaultPolicy(policy =>
             policy.WithOrigins(allowedOrigins)
                 .WithHeaders("Content-Type", "X-CSRF-Token")
-                .WithMethods("GET", "POST", "PUT")
+                .WithMethods("GET", "POST", "PUT", "DELETE")
                 .WithExposedHeaders("Retry-After")
                 .AllowCredentials()));
 }
 
 var app = builder.Build();
+
+var fixedAdministrator = app.Configuration.GetSection("DevelopmentSuperAdministrator");
+if (app.Environment.IsDevelopment() && fixedAdministrator.GetValue("Enabled", false))
+{
+    using var scope = app.Services.CreateScope();
+    var bootstrapper = scope.ServiceProvider.GetRequiredService<IPlatformAdministratorBootstrapper>();
+    await bootstrapper.EnsureSuperAdministratorAsync(new PlatformAdministratorBootstrapRequest(
+        fixedAdministrator["Email"] ?? "admin.mvp@brotherscare.local",
+        fixedAdministrator["DisplayName"] ?? "Super Admin Brothers Care",
+        fixedAdministrator["Cpf"] ?? "11144477735",
+        fixedAdministrator["Password"] ?? "admin"), CancellationToken.None);
+}
 
 if (args.Contains("--bootstrap-super-administrator", StringComparer.Ordinal))
 {

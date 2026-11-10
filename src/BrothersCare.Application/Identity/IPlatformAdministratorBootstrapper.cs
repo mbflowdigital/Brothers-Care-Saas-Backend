@@ -7,6 +7,10 @@ public interface IPlatformAdministratorBootstrapper
         CancellationToken cancellationToken);
 }
 
-public sealed record PlatformAdministratorBootstrapRequest(string Email, string DisplayName);
+public sealed record PlatformAdministratorBootstrapRequest(
+    string Email,
+    string DisplayName,
+    string? Cpf = null,
+    string? InitialPassword = null);
 
 public sealed record PlatformAdministratorBootstrapResult(bool Created);

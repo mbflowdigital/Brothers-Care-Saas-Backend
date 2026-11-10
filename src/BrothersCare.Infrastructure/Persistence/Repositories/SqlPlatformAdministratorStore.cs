@@ -19,6 +19,9 @@ public sealed class SqlPlatformAdministratorStore(BrothersCareDbContext dbContex
         public Task<User?> FindUserAsync(string normalizedEmail, CancellationToken cancellationToken) =>
             context.Users.SingleOrDefaultAsync(item => item.NormalizedEmail == normalizedEmail, cancellationToken);
 
+        public Task<User?> FindUserByCpfAsync(string cpf, CancellationToken cancellationToken) =>
+            context.Users.SingleOrDefaultAsync(item => item.Cpf == cpf, cancellationToken);
+
         public Task<PlatformAdministrator?> FindAdministratorAsync(Guid userId, CancellationToken cancellationToken) =>
             context.PlatformAdministrators.SingleOrDefaultAsync(item => item.UserId == userId, cancellationToken);
 

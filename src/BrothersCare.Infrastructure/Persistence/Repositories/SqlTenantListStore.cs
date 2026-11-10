@@ -13,12 +13,23 @@ public sealed class SqlTenantListStore(BrothersCareDbContext dbContext) : ITenan
         return await query.Select(item => new TenantListItem(
             item.Id,
             item.Name,
+            item.Cnpj,
             item.Status.ToString(),
             dbContext.TenantMemberships
                 .Where(membership => membership.TenantId == item.Id && membership.Role == TenantMembershipRole.ClinicAdministrator)
                 .OrderBy(membership => membership.CreatedAt)
                 .Select(membership => membership.Status.ToString())
-                .FirstOrDefault() ?? "WithoutAdministrator"))
+                .FirstOrDefault() ?? "WithoutAdministrator",
+            (from membership in dbContext.TenantMemberships
+             join user in dbContext.Users on membership.UserId equals user.Id
+             where membership.TenantId == item.Id && membership.Role == TenantMembershipRole.ClinicAdministrator
+             orderby membership.CreatedAt
+             select user.DisplayName).FirstOrDefault(),
+            (from membership in dbContext.TenantMemberships
+             join user in dbContext.Users on membership.UserId equals user.Id
+             where membership.TenantId == item.Id && membership.Role == TenantMembershipRole.ClinicAdministrator
+             orderby membership.CreatedAt
+             select user.Email).FirstOrDefault()))
             .ToListAsync(cancellationToken);
     }
 

@@ -10,6 +10,7 @@ public interface IPlatformAdministratorStore
 public interface IPlatformAdministratorTransaction : IAsyncDisposable
 {
     Task<User?> FindUserAsync(string normalizedEmail, CancellationToken cancellationToken);
+    Task<User?> FindUserByCpfAsync(string cpf, CancellationToken cancellationToken);
     Task<PlatformAdministrator?> FindAdministratorAsync(Guid userId, CancellationToken cancellationToken);
     Task<UserCredential?> FindCredentialAsync(Guid userId, CancellationToken cancellationToken);
     void AddUser(User user);

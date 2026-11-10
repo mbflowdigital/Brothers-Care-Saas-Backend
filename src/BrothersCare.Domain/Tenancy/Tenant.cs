@@ -66,6 +66,27 @@ public sealed class Tenant
         Phone = normalizedPhone;
     }
 
+    public void UpdatePendingOnboarding(string name, string cnpj)
+    {
+        if (Status != TenantStatus.PendingOnboarding)
+        {
+            throw new InvalidOperationException("Only a tenant pending onboarding can be edited.");
+        }
+
+        Rename(name);
+        SetCnpj(cnpj);
+    }
+
+    public void CancelPendingOnboarding()
+    {
+        if (Status != TenantStatus.PendingOnboarding)
+        {
+            throw new InvalidOperationException("Only a tenant pending onboarding can be cancelled.");
+        }
+
+        Status = TenantStatus.Deactivated;
+    }
+
     public static string NormalizeCnpj(string cnpj)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(cnpj);
