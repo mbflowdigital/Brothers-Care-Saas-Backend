@@ -30,9 +30,13 @@ public sealed class Professional
 
     public Guid TenantId { get; private set; }
 
+    public Guid? TenantMembershipId { get; private set; }
+
     public string FullName { get; private set; } = string.Empty;
 
     public string Specialty { get; private set; } = string.Empty;
+
+    public string? CouncilType { get; private set; }
 
     public string RegistrationNumber { get; private set; } = string.Empty;
 
@@ -53,6 +57,25 @@ public sealed class Professional
     public void Inactivate() => Status = ProfessionalStatus.Inactive;
 
     public void Activate() => Status = ProfessionalStatus.Active;
+
+    public void ConfigureForMembership(
+        Guid tenantMembershipId,
+        string fullName,
+        string specialty,
+        string councilType,
+        string registrationNumber)
+    {
+        if (tenantMembershipId == Guid.Empty)
+        {
+            throw new ArgumentException("Tenant membership id is required.", nameof(tenantMembershipId));
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(councilType);
+        TenantMembershipId = tenantMembershipId;
+        CouncilType = councilType.Trim();
+        UpdateDetails(fullName, specialty, registrationNumber);
+        Activate();
+    }
 }
 
 public enum ProfessionalStatus

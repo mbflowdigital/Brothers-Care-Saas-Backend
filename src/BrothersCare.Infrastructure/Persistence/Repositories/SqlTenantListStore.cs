@@ -6,31 +6,50 @@ namespace BrothersCare.Infrastructure.Persistence.Repositories;
 
 public sealed class SqlTenantListStore(BrothersCareDbContext dbContext) : ITenantListStore
 {
-    public async Task<IReadOnlyList<TenantListItem>> ListAsync(string? search, CancellationToken cancellationToken)
+    public async Task<TenantPage> ListAsync(string? search, int page, int pageSize, CancellationToken cancellationToken)
     {
-        var query = dbContext.Tenants.AsNoTracking().OrderBy(item => item.Name).AsQueryable();
-        if (!string.IsNullOrWhiteSpace(search)) query = query.Where(item => item.Name.Contains(search.Trim()));
-        return await query.Select(item => new TenantListItem(
-            item.Id,
-            item.Name,
-            item.Cnpj,
-            item.Status.ToString(),
-            dbContext.TenantMemberships
-                .Where(membership => membership.TenantId == item.Id && membership.Role == TenantMembershipRole.ClinicAdministrator)
-                .OrderBy(membership => membership.CreatedAt)
-                .Select(membership => membership.Status.ToString())
-                .FirstOrDefault() ?? "WithoutAdministrator",
-            (from membership in dbContext.TenantMemberships
-             join user in dbContext.Users on membership.UserId equals user.Id
-             where membership.TenantId == item.Id && membership.Role == TenantMembershipRole.ClinicAdministrator
-             orderby membership.CreatedAt
-             select user.DisplayName).FirstOrDefault(),
-            (from membership in dbContext.TenantMemberships
-             join user in dbContext.Users on membership.UserId equals user.Id
-             where membership.TenantId == item.Id && membership.Role == TenantMembershipRole.ClinicAdministrator
-             orderby membership.CreatedAt
-             select user.Email).FirstOrDefault()))
+        var allTenants = dbContext.Tenants.AsNoTracking();
+        var query = allTenants.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(search)) query = query.Where(item => item.Name.Contains(search));
+
+        var administrators =
+            from membership in dbContext.TenantMemberships.AsNoTracking()
+            join user in dbContext.Users.AsNoTracking() on membership.UserId equals user.Id
+            where membership.Role == TenantMembershipRole.ClinicAdministrator
+            select new { membership.TenantId, membership.CreatedAt, membership.Status, user.DisplayName, user.Email };
+
+        var rows = await query.OrderBy(item => item.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(item => new TenantListRow(
+                item.Id, item.Name, item.Cnpj, item.Status.ToString(),
+                administrators.Where(admin => admin.TenantId == item.Id).OrderBy(admin => admin.CreatedAt)
+                    .Select(admin => admin.Status.ToString()).FirstOrDefault() ?? "WithoutAdministrator",
+                administrators.Where(admin => admin.TenantId == item.Id).OrderBy(admin => admin.CreatedAt)
+                    .Select(admin => admin.DisplayName).FirstOrDefault(),
+                administrators.Where(admin => admin.TenantId == item.Id).OrderBy(admin => admin.CreatedAt)
+                    .Select(admin => admin.Email).FirstOrDefault(),
+                query.Count(),
+                allTenants.Count(tenant => tenant.Status == TenantStatus.PendingOnboarding),
+                allTenants.Count(tenant => tenant.Status == TenantStatus.Active)))
             .ToListAsync(cancellationToken);
+
+        if (rows.Count == 0)
+        {
+            if (page > 1) return await ListAsync(search, page - 1, pageSize, cancellationToken);
+            var counts = await allTenants.GroupBy(_ => 1).Select(group => new
+            {
+                Pending = group.Count(item => item.Status == TenantStatus.PendingOnboarding),
+                Active = group.Count(item => item.Status == TenantStatus.Active),
+            }).SingleOrDefaultAsync(cancellationToken);
+            return new TenantPage([], 1, pageSize, 0, 1, counts?.Pending ?? 0, counts?.Active ?? 0);
+        }
+
+        var first = rows[0];
+        var totalPages = Math.Max(1, (int)Math.Ceiling(first.TotalItems / (double)pageSize));
+        var items = rows.Select(item => new TenantListItem(item.Id, item.Name, item.Cnpj, item.Status,
+            item.FirstAdministratorStatus, item.ResponsibleName, item.ResponsibleEmail)).ToArray();
+        return new TenantPage(items, page, pageSize, first.TotalItems, totalPages, first.PendingCount, first.ActiveCount);
     }
 
     public async Task<TenantDetails?> GetAsync(Guid tenantId, CancellationToken cancellationToken)
@@ -58,4 +77,8 @@ public sealed class SqlTenantListStore(BrothersCareDbContext dbContext) : ITenan
 
         return new TenantDetails(tenant.Id, tenant.Name, tenant.Status, administrator);
     }
+
+    private sealed record TenantListRow(
+        Guid Id, string Name, string? Cnpj, string Status, string FirstAdministratorStatus,
+        string? ResponsibleName, string? ResponsibleEmail, int TotalItems, int PendingCount, int ActiveCount);
 }

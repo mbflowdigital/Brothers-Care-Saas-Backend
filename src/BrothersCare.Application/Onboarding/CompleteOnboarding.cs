@@ -12,7 +12,8 @@ public sealed class CompleteOnboarding(
     IPasswordHasher passwordHasher,
     ITokenGenerator tokenGenerator,
     TimeProvider timeProvider,
-    IAuthenticationAudit audit)
+    IAuthenticationAudit audit,
+    DevelopmentOnboardingBypass? developmentBypass = null)
 {
     public async Task<OnboardingCompletionResult> ExecuteAsync(
         CompleteOnboardingCommand command,
@@ -170,14 +171,22 @@ public sealed class CompleteOnboarding(
         }
     }
 
-    private static bool IsValidPassword(string password, string confirmation) =>
-        password.Length is >= 12 and <= 128 && confirmation.Length <= 128 &&
-        password.Any(char.IsLetter) && password.Any(char.IsDigit) &&
-        CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(password), Encoding.UTF8.GetBytes(confirmation));
+    private bool IsValidPassword(string password, string confirmation)
+    {
+        if (developmentBypass is not null &&
+            CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(password), Encoding.UTF8.GetBytes(developmentBypass.Password)) &&
+            CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(password), Encoding.UTF8.GetBytes(confirmation)))
+            return true;
+        return password.Length is >= 12 and <= 128 && confirmation.Length <= 128 &&
+            password.Any(char.IsLetter) && password.Any(char.IsDigit) &&
+            CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(password), Encoding.UTF8.GetBytes(confirmation));
+    }
 
     private static bool IsRequired(string? value, int maximumLength) =>
         !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= maximumLength;
 }
+
+public sealed record DevelopmentOnboardingBypass(string Password);
 
 public sealed record CompleteOnboardingCommand(
     string Token,

@@ -122,6 +122,8 @@ public sealed class InviteTenantUser(
         }
 
         await transaction.SetUnitMembershipsAsync(tenantId, membership.Id, command.ClinicUnitIds, now, cancellationToken);
+        await transaction.SetProfessionalProfileAsync(tenantId, membership.Id, user.DisplayName,
+            command.PerformsCare, command.Specialty, command.CouncilType, command.RegistrationNumber, now, cancellationToken);
         await transaction.RevokePreviousInvitationsAsync(membership.Id, now, cancellationToken);
         await transaction.RevokeTenantSessionsAsync(tenantId, user.Id, now, cancellationToken);
         var generated = tokenGenerator.Generate();
@@ -144,11 +146,32 @@ public sealed class InviteTenantUser(
             !string.IsNullOrWhiteSpace(command.DisplayName) && command.DisplayName.Length <= 200 &&
             Enum.TryParse(command.Role, out role) && Enum.IsDefined(role) && role.ToString() == command.Role &&
             command.ClinicUnitIds is not null && command.ClinicUnitIds.All(id => id != Guid.Empty) &&
-            command.ClinicUnitIds.Distinct().Count() == command.ClinicUnitIds.Count;
+            command.ClinicUnitIds.Distinct().Count() == command.ClinicUnitIds.Count &&
+            IsProfessionalConfigurationValid(role, command.PerformsCare,
+                command.Specialty, command.CouncilType, command.RegistrationNumber);
     }
+
+    private static bool IsProfessionalConfigurationValid(TenantMembershipRole role, bool performsCare,
+        string? specialty, string? councilType, string? registrationNumber)
+    {
+        if (role == TenantMembershipRole.Receptionist) return !performsCare;
+        if (role == TenantMembershipRole.Professional && !performsCare) return false;
+        return !performsCare || IsRequired(specialty, 150) && IsRequired(councilType, 30) && IsRequired(registrationNumber, 100);
+    }
+
+    private static bool IsRequired(string? value, int maximumLength) =>
+        !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= maximumLength;
 }
 
-public sealed record InviteTenantUserCommand(string Email, string DisplayName, string Role, IReadOnlyList<Guid> ClinicUnitIds)
+public sealed record InviteTenantUserCommand(
+    string Email,
+    string DisplayName,
+    string Role,
+    IReadOnlyList<Guid> ClinicUnitIds,
+    bool PerformsCare,
+    string? Specialty,
+    string? CouncilType,
+    string? RegistrationNumber)
 {
     public override string ToString() => "[REDACTED]";
 }

@@ -9,21 +9,24 @@ public sealed class ManageTenantTeam(
     TimeProvider timeProvider)
 {
     public Task<TenantTeamMutationStatus> UpdateAsync(Guid membershipId, string role,
-        IReadOnlyList<Guid> clinicUnitIds, CancellationToken cancellationToken) =>
-        ExecuteAsync(membershipId, role, clinicUnitIds, false, cancellationToken);
+        IReadOnlyList<Guid> clinicUnitIds, bool performsCare, string? specialty, string? councilType,
+        string? registrationNumber, CancellationToken cancellationToken) =>
+        ExecuteAsync(membershipId, role, clinicUnitIds, performsCare, specialty, councilType, registrationNumber, false, cancellationToken);
 
     public Task<TenantTeamMutationStatus> DeactivateAsync(Guid membershipId, CancellationToken cancellationToken) =>
-        ExecuteAsync(membershipId, null, [], true, cancellationToken);
+        ExecuteAsync(membershipId, null, [], false, null, null, null, true, cancellationToken);
 
     private async Task<TenantTeamMutationStatus> ExecuteAsync(Guid membershipId, string? roleName,
-        IReadOnlyList<Guid> clinicUnitIds, bool deactivate, CancellationToken cancellationToken)
+        IReadOnlyList<Guid> clinicUnitIds, bool performsCare, string? specialty, string? councilType,
+        string? registrationNumber, bool deactivate, CancellationToken cancellationToken)
     {
         var principal = principalAccessor.Principal;
         if (principal?.ActiveTenantId is not { } tenantId) return TenantTeamMutationStatus.Unauthenticated;
         if (membershipId == Guid.Empty) return TenantTeamMutationStatus.InvalidInput;
         if (!deactivate && (!Enum.TryParse<TenantMembershipRole>(roleName, out var parsedRole) ||
             !Enum.IsDefined(parsedRole) || parsedRole.ToString() != roleName || clinicUnitIds.Count == 0 ||
-            clinicUnitIds.Any(id => id == Guid.Empty) || clinicUnitIds.Distinct().Count() != clinicUnitIds.Count))
+            clinicUnitIds.Any(id => id == Guid.Empty) || clinicUnitIds.Distinct().Count() != clinicUnitIds.Count ||
+            !IsProfessionalConfigurationValid(parsedRole, performsCare, specialty, councilType, registrationNumber)))
             return TenantTeamMutationStatus.InvalidInput;
 
         await using var transaction = await store.BeginAsync(cancellationToken);
@@ -50,6 +53,8 @@ public sealed class ManageTenantTeam(
                 await transaction.CountActiveAdministratorsAsync(tenantId, cancellationToken) <= 1)
                 return TenantTeamMutationStatus.LastAdministrator;
             target.Deactivate();
+            await transaction.SetProfessionalProfileAsync(tenantId, target.Id, targetData.DisplayName,
+                false, null, null, null, now, cancellationToken);
             await transaction.RevokeInvitationTokensAsync(target.Id, now, cancellationToken);
             await transaction.RevokeTenantSessionsAsync(tenantId, target.UserId, now, cancellationToken);
         }
@@ -68,6 +73,8 @@ public sealed class ManageTenantTeam(
                 return TenantTeamMutationStatus.LastAdministrator;
             target.ChangeRole(role);
             await transaction.SetUnitMembershipsAsync(tenantId, target.Id, clinicUnitIds, now, cancellationToken);
+            await transaction.SetProfessionalProfileAsync(tenantId, target.Id, targetData.DisplayName,
+                performsCare, specialty, councilType, registrationNumber, now, cancellationToken);
             await transaction.RevokeTenantSessionsAsync(tenantId, target.UserId, now, cancellationToken);
         }
 
@@ -75,6 +82,17 @@ public sealed class ManageTenantTeam(
         await transaction.CommitAsync(cancellationToken);
         return TenantTeamMutationStatus.Success;
     }
+
+    private static bool IsProfessionalConfigurationValid(TenantMembershipRole role, bool performsCare,
+        string? specialty, string? councilType, string? registrationNumber)
+    {
+        if (role == TenantMembershipRole.Receptionist) return !performsCare;
+        if (role == TenantMembershipRole.Professional && !performsCare) return false;
+        return !performsCare || IsRequired(specialty, 150) && IsRequired(councilType, 30) && IsRequired(registrationNumber, 100);
+    }
+
+    private static bool IsRequired(string? value, int maximumLength) =>
+        !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= maximumLength;
 }
 
 public enum TenantTeamMutationStatus

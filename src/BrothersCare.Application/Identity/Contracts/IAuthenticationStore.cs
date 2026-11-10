@@ -15,6 +15,7 @@ public interface IAuthenticationTransaction : IAsyncDisposable
     Task<User?> FindUserByIdAsync(Guid userId, CancellationToken cancellationToken);
     Task<UserCredential?> FindCredentialAsync(Guid userId, CancellationToken cancellationToken);
     Task<UserSession?> FindSessionAsync(Guid sessionId, CancellationToken cancellationToken);
+    Task<SessionAuthenticationState?> FindSessionStateAsync(Guid sessionId, CancellationToken cancellationToken);
     Task<TenantMembership?> FindSelectableMembershipAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);
     Task<IReadOnlyList<Guid>> GetAuthorizedClinicUnitIdsAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);
     void AddSession(UserSession session);
@@ -22,3 +23,5 @@ public interface IAuthenticationTransaction : IAsyncDisposable
     Task<SessionSummary?> GetSummaryAsync(UserSession session, CancellationToken cancellationToken);
     Task CommitAsync(CancellationToken cancellationToken);
 }
+
+public sealed record SessionAuthenticationState(UserSession Session, UserCredentialStatus CredentialStatus);

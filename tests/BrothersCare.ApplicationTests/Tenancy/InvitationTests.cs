@@ -27,6 +27,9 @@ public sealed class InvitationTests
         Assert.Equal(MembershipStatus.Invited, invited.Status);
         Assert.Equal(TenantMembershipRole.Professional, invited.Role);
         Assert.Contains(scenario.Store.UnitMemberships, item => item.TenantMembershipId == invited.Id && item.ClinicUnitId == unitId);
+        var profile = Assert.Single(scenario.Store.Professionals, item => item.TenantMembershipId == invited.Id);
+        Assert.Equal("Psicologia", profile.Specialty);
+        Assert.Equal("CRP", profile.CouncilType);
         var token = Assert.Single(scenario.Store.Tokens);
         Assert.Equal(invited.Id, token.TenantMembershipId);
         Assert.Equal(AccountActionTokenPurpose.InvitationAcceptance, token.Purpose);
@@ -166,6 +169,36 @@ public sealed class InvitationTests
     }
 
     [Fact]
+    public async Task AdministratorMayOptionallyReceiveProfessionalProfile()
+    {
+        var scenario = AdminScenario();
+        var command = Command("owner@example.invalid", scenario.Store.Units[0].Id) with
+        {
+            Role = "ClinicAdministrator",
+            PerformsCare = true,
+        };
+
+        Assert.Equal(InvitationStatus.Accepted,
+            await Invite(scenario).ExecuteAsync(command, CancellationToken.None));
+        Assert.Single(scenario.Store.Professionals, item => item.CouncilType == "CRP");
+    }
+
+    [Fact]
+    public async Task ReceptionistCannotBeConfiguredAsCareProvider()
+    {
+        var scenario = AdminScenario();
+        var command = Command("reception@example.invalid", scenario.Store.Units[0].Id) with
+        {
+            Role = "Receptionist",
+            PerformsCare = true,
+        };
+
+        Assert.Equal(InvitationStatus.InvalidInput,
+            await Invite(scenario).ExecuteAsync(command, CancellationToken.None));
+        Assert.Empty(scenario.Store.Professionals);
+    }
+
+    [Fact]
     public async Task MissingDeliveryOrFullPlanDoesNotCreateUserOrInvitation()
     {
         var scenario = AdminScenario();
@@ -193,5 +226,5 @@ public sealed class InvitationTests
             scenario.Clock, scenario);
 
     private static InviteTenantUserCommand Command(string email, Guid unitId) =>
-        new(email, "Pessoa convidada", "Professional", [unitId]);
+        new(email, "Pessoa convidada", "Professional", [unitId], true, "Psicologia", "CRP", "06/123456");
 }

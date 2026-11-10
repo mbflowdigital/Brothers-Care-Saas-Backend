@@ -1,6 +1,7 @@
 using BrothersCare.Application.Identity.Activation;
 using BrothersCare.Application.Identity.Invitations;
 using BrothersCare.ApplicationTests.Support;
+using BrothersCare.Domain.Care;
 using BrothersCare.Domain.Identity;
 using BrothersCare.Domain.Tenancy;
 
@@ -19,7 +20,7 @@ public sealed class TeamManagementTests
             await service.DeactivateAsync(actor.Id, CancellationToken.None));
         Assert.Equal(TenantTeamMutationStatus.LastAdministrator,
             await service.UpdateAsync(actor.Id, TenantMembershipRole.Professional.ToString(),
-                [scenario.Store.Units[0].Id], CancellationToken.None));
+                [scenario.Store.Units[0].Id], true, "Psicologia", "CRP", "06/123456", CancellationToken.None));
         Assert.Equal(MembershipStatus.Active, actor.Status);
         Assert.Equal(TenantMembershipRole.ClinicAdministrator, actor.Role);
     }
@@ -35,6 +36,8 @@ public sealed class TeamManagementTests
         scenario.Store.Memberships.Add(target);
         scenario.Store.UnitMemberships.Add(new ClinicUnitMembership(Guid.NewGuid(), tenant.Id,
             scenario.Store.Units[0].Id, target.Id, scenario.Clock.GetUtcNow()));
+        await scenario.Store.SetProfessionalProfileAsync(tenant.Id, target.Id, targetUser.DisplayName,
+            true, "Fisioterapia", "CREFITO", "12345", scenario.Clock.GetUtcNow(), CancellationToken.None);
 
         var result = await new ManageTenantTeam(scenario, scenario.Store, scenario.Clock)
             .DeactivateAsync(target.Id, CancellationToken.None);
@@ -42,6 +45,7 @@ public sealed class TeamManagementTests
         Assert.Equal(TenantTeamMutationStatus.Success, result);
         Assert.Equal(MembershipStatus.Revoked, target.Status);
         Assert.Contains(target, scenario.Store.Memberships);
+        Assert.Equal(ProfessionalStatus.Inactive, Assert.Single(scenario.Store.Professionals).Status);
     }
 
     [Fact]

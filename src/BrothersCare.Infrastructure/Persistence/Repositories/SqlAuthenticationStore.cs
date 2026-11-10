@@ -26,39 +26,20 @@ public sealed class SqlAuthenticationStore(BrothersCareDbContext dbContext) : IA
 
         public async Task<UserCredential?> FindCredentialAsync(Guid userId, CancellationToken cancellationToken)
         {
-            var credential = await context.UserCredentials.SingleOrDefaultAsync(
+            return await context.UserCredentials.SingleOrDefaultAsync(
                 item => item.UserId == userId,
                 cancellationToken);
-            if (credential is not null)
-            {
-                // Authentication and the use case can share a DbContext: never reuse a stale tracked credential.
-                await context.Entry(credential).ReloadAsync(cancellationToken);
-            }
-
-            return credential;
         }
 
-        public async Task<UserSession?> FindSessionAsync(Guid sessionId, CancellationToken cancellationToken)
-        {
-            var userId = await context.UserSessions.AsNoTracking().Where(item => item.Id == sessionId)
-                .Select(item => (Guid?)item.UserId).SingleOrDefaultAsync(cancellationToken);
-            if (userId is null)
-            {
-                return null;
-            }
+        public Task<UserSession?> FindSessionAsync(Guid sessionId, CancellationToken cancellationToken) =>
+            context.UserSessions.SingleOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
 
-            // Refresh the credential before loading the tracked session state.
-            await FindCredentialAsync(userId.Value, cancellationToken);
-            var session = await context.UserSessions.SingleOrDefaultAsync(
-                item => item.Id == sessionId,
-                cancellationToken);
-            if (session is not null)
-            {
-                await context.Entry(session).ReloadAsync(cancellationToken);
-            }
-
-            return session;
-        }
+        public Task<SessionAuthenticationState?> FindSessionStateAsync(Guid sessionId, CancellationToken cancellationToken) =>
+            (from session in context.UserSessions
+             join credential in context.UserCredentials on session.UserId equals credential.UserId
+             where session.Id == sessionId
+             select new SessionAuthenticationState(session, credential.Status))
+            .SingleOrDefaultAsync(cancellationToken);
 
         public async Task<TenantMembership?> FindSelectableMembershipAsync(
             Guid userId, Guid tenantId, CancellationToken cancellationToken)
@@ -104,20 +85,28 @@ public sealed class SqlAuthenticationStore(BrothersCareDbContext dbContext) : IA
 
         public async Task<SessionSummary?> GetSummaryAsync(UserSession session, CancellationToken cancellationToken)
         {
-            var user = await context.Users.AsNoTracking().Where(item => item.Id == session.UserId)
-                .Select(item => new SessionUser(item.Id, item.DisplayName, item.Email)).SingleOrDefaultAsync(cancellationToken);
-            if (user is null)
+            var identity = await (
+                from user in context.Users.AsNoTracking()
+                where user.Id == session.UserId
+                join platformAdministrator in context.PlatformAdministrators.AsNoTracking()
+                        .Where(item => item.Status == PlatformAdministratorStatus.Active)
+                    on user.Id equals platformAdministrator.UserId into platformAdministrators
+                from platformAdministrator in platformAdministrators.DefaultIfEmpty()
+                select new
+                {
+                    User = new SessionUser(user.Id, user.DisplayName, user.Email),
+                    AdministratorRole = platformAdministrator == null ? null : platformAdministrator.Role.ToString(),
+                }).SingleOrDefaultAsync(cancellationToken);
+            if (identity is null)
             {
                 return null;
             }
-
-            var administrator = await context.PlatformAdministrators.AsNoTracking()
-                .Where(item => item.UserId == user.Id && item.Status == PlatformAdministratorStatus.Active)
-                .Select(item => new SessionPlatformAdministrator(item.Role.ToString())).SingleOrDefaultAsync(cancellationToken);
-            var memberships = await (
+            var memberships = identity.AdministratorRole is not null
+                ? new List<SessionMembership>()
+                : await (
                 from membership in context.TenantMemberships.AsNoTracking()
                 join tenant in context.Tenants.AsNoTracking() on membership.TenantId equals tenant.Id
-                where membership.UserId == user.Id && membership.Status == MembershipStatus.Active && tenant.Status == TenantStatus.Active
+                where membership.UserId == identity.User.Id && membership.Status == MembershipStatus.Active && tenant.Status == TenantStatus.Active
                 orderby tenant.Name
                 select new SessionMembership(membership.Id, tenant.Id, tenant.Name, membership.Role.ToString()))
                 .ToListAsync(cancellationToken);
@@ -134,7 +123,10 @@ public sealed class SqlAuthenticationStore(BrothersCareDbContext dbContext) : IA
                 activeTenant = new SessionTenant(tenantId, membership.TenantName);
             }
 
-            return new SessionSummary(user, administrator, memberships, activeTenant, session.IdleExpiresAt);
+            var administrator = identity.AdministratorRole is null
+                ? null
+                : new SessionPlatformAdministrator(identity.AdministratorRole);
+            return new SessionSummary(identity.User, administrator, memberships, activeTenant, session.IdleExpiresAt);
         }
 
         public async Task CommitAsync(CancellationToken cancellationToken)

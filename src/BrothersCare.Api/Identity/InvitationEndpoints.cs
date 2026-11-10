@@ -53,7 +53,8 @@ public static class InvitationEndpoints
         context.Response.Headers.CacheControl = "no-store";
         if (request?.Role is null || request.ClinicUnitIds is null)
             return TeamProblem(context, TenantTeamMutationStatus.InvalidInput);
-        var result = await manageTenantTeam.UpdateAsync(membershipId, request.Role, request.ClinicUnitIds, cancellationToken);
+        var result = await manageTenantTeam.UpdateAsync(membershipId, request.Role, request.ClinicUnitIds,
+            request.PerformsCare, request.Specialty, request.CouncilType, request.RegistrationNumber, cancellationToken);
         return result == TenantTeamMutationStatus.Success ? TypedResults.NoContent() : TeamProblem(context, result);
     }
 
@@ -92,7 +93,8 @@ public static class InvitationEndpoints
                 new TenantTeamMemberResponse(item.MembershipId, item.UserId, item.DisplayName, item.Email,
                     item.Role, item.Status, item.CreatedAt,
                     item.Units.Select(unit => new TenantTeamUnitResponse(unit.Id, unit.Name)).ToArray(),
-                    item.UserId == principalAccessor.Principal?.UserId)).ToArray()),
+                    item.UserId == principalAccessor.Principal?.UserId,
+                    item.PerformsCare, item.Specialty, item.CouncilType, item.RegistrationNumber)).ToArray()),
             TenantTeamStatus.Forbidden => AuthenticationProblems.Create(context, StatusCodes.Status403Forbidden,
                 "Você não tem permissão para consultar a equipe desta empresa.", "forbidden"),
             _ => AuthenticationProblems.Create(context, StatusCodes.Status401Unauthorized,
@@ -114,7 +116,8 @@ public static class InvitationEndpoints
         }
 
         var result = await inviteTenantUser.ExecuteAsync(new InviteTenantUserCommand(
-            request.Email, request.DisplayName, request.Role, request.ClinicUnitIds), cancellationToken);
+            request.Email, request.DisplayName, request.Role, request.ClinicUnitIds,
+            request.PerformsCare, request.Specialty, request.CouncilType, request.RegistrationNumber), cancellationToken);
         if (result == InvitationStatus.Accepted)
         {
             return TypedResults.Accepted((string?)null);
@@ -143,13 +146,27 @@ public static class InvitationEndpoints
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record InviteTenantUserHttpRequest(string? Email, string? DisplayName, string? Role, Guid[]? ClinicUnitIds)
+public sealed record InviteTenantUserHttpRequest(
+    string? Email,
+    string? DisplayName,
+    string? Role,
+    Guid[]? ClinicUnitIds,
+    bool PerformsCare,
+    string? Specialty,
+    string? CouncilType,
+    string? RegistrationNumber)
 {
     public override string ToString() => "[REDACTED]";
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record UpdateTenantTeamMemberRequest(string? Role, Guid[]? ClinicUnitIds);
+public sealed record UpdateTenantTeamMemberRequest(
+    string? Role,
+    Guid[]? ClinicUnitIds,
+    bool PerformsCare,
+    string? Specialty,
+    string? CouncilType,
+    string? RegistrationNumber);
 
 public sealed record TenantTeamMemberResponse(
     Guid MembershipId,
@@ -160,6 +177,10 @@ public sealed record TenantTeamMemberResponse(
     string Status,
     DateTimeOffset CreatedAt,
     IReadOnlyList<TenantTeamUnitResponse> Units,
-    bool IsCurrentUser);
+    bool IsCurrentUser,
+    bool PerformsCare,
+    string? Specialty,
+    string? CouncilType,
+    string? RegistrationNumber);
 
 public sealed record TenantTeamUnitResponse(Guid Id, string Name);

@@ -10,7 +10,8 @@ public sealed class CreateCommercialOnboarding(
     ICommercialOnboardingStore store,
     ITokenGenerator tokenGenerator,
     ICommercialOnboardingSender? invitationSender,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    DevelopmentCommercialOnboardingBypass? developmentBypass = null)
 {
     public async Task<CommercialOnboardingResult> ExecuteAsync(
         CreateCommercialOnboardingCommand command,
@@ -22,7 +23,7 @@ public sealed class CreateCommercialOnboarding(
             return new(CommercialOnboardingStatus.InvalidInput);
         }
 
-        if (invitationSender is null)
+        if (invitationSender is null && developmentBypass is null)
         {
             return new(CommercialOnboardingStatus.DeliveryUnavailable);
         }
@@ -60,10 +61,21 @@ public sealed class CreateCommercialOnboarding(
             generatedToken.SecretHash, now, expiresAt, membership.Id));
 
         await transaction.SaveAsync(cancellationToken);
-        await invitationSender.SendAsync(new InvitationDelivery(
-            email, command.ResponsibleName.Trim(), tenant.Name, generatedToken.Secret, expiresAt), cancellationToken);
+        if (invitationSender is not null)
+        {
+            try
+            {
+                await invitationSender.SendAsync(new InvitationDelivery(
+                    email, command.ResponsibleName.Trim(), tenant.Name, generatedToken.Secret, expiresAt), cancellationToken);
+            }
+            catch when (developmentBypass is not null)
+            {
+                // Development keeps the generated link available in the Super Admin screen.
+            }
+        }
         await transaction.CommitAsync(cancellationToken);
-        return new(CommercialOnboardingStatus.Created, tenant.Id);
+        return new(CommercialOnboardingStatus.Created, tenant.Id,
+            developmentBypass is null ? null : generatedToken.Secret);
     }
 
     private static bool TryValidate(CreateCommercialOnboardingCommand command, out string? cnpj)
@@ -109,4 +121,12 @@ public enum CommercialOnboardingStatus
     DeliveryUnavailable = 4,
 }
 
-public sealed record CommercialOnboardingResult(CommercialOnboardingStatus Status, Guid? TenantId = null);
+public sealed record CommercialOnboardingResult(
+    CommercialOnboardingStatus Status,
+    Guid? TenantId = null,
+    string? DevelopmentToken = null)
+{
+    public override string ToString() => "[REDACTED]";
+}
+
+public sealed record DevelopmentCommercialOnboardingBypass;

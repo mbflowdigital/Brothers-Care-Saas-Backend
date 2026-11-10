@@ -190,6 +190,10 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("CouncilType")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -214,12 +218,19 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("TenantMembershipId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "RegistrationNumber")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "TenantMembershipId")
+                        .IsUnique()
+                        .HasFilter("[TenantMembershipId] IS NOT NULL");
 
                     b.HasIndex("TenantId", "Status", "FullName");
 
@@ -730,6 +741,12 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("BrothersCare.Domain.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "TenantMembershipId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("BrothersCare.Domain.Identity.AccountActionToken", b =>

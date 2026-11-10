@@ -45,8 +45,10 @@ public static class CommercialOnboardingEndpoints
     private static Task<Results<Created<CommercialOnboardingResponse>, ProblemHttpResult>> CreatePreRegistrationAsync(
         [FromBody] CommercialOnboardingHttpRequest? request,
         [FromServices] CreateCommercialOnboarding createCommercialOnboarding,
+        [FromServices] IHostEnvironment environment,
+        [FromServices] IConfiguration configuration,
         HttpContext context,
-        CancellationToken cancellationToken) => CreateCoreAsync(request, createCommercialOnboarding, context, cancellationToken);
+        CancellationToken cancellationToken) => CreateCoreAsync(request, createCommercialOnboarding, environment, configuration, context, cancellationToken);
 
     private static async Task<Results<Created<CommercialOnboardingResponse>, ProblemHttpResult>> CreateAsync(
         [FromBody] CommercialOnboardingHttpRequest? request,
@@ -69,12 +71,14 @@ public static class CommercialOnboardingEndpoints
                 "Informe os dados da empresa e da pessoa responsável.", "validation");
         }
 
-        return await CreateCoreAsync(request, createCommercialOnboarding, context, cancellationToken);
+        return await CreateCoreAsync(request, createCommercialOnboarding, environment, configuration, context, cancellationToken);
     }
 
     private static async Task<Results<Created<CommercialOnboardingResponse>, ProblemHttpResult>> CreateCoreAsync(
         CommercialOnboardingHttpRequest? request,
         CreateCommercialOnboarding createCommercialOnboarding,
+        IHostEnvironment environment,
+        IConfiguration configuration,
         HttpContext context,
         CancellationToken cancellationToken)
     {
@@ -91,7 +95,14 @@ public static class CommercialOnboardingEndpoints
             request.ResponsibleEmail ?? string.Empty), cancellationToken);
         if (result.Status == CommercialOnboardingStatus.Created && result.TenantId is { } tenantId)
         {
-            return TypedResults.Created((string?)null, new CommercialOnboardingResponse(tenantId, "PendingOnboarding"));
+            string? onboardingUrl = null;
+            if (environment.IsDevelopment() && result.DevelopmentToken is not null &&
+                Uri.TryCreate(configuration["Email:Links:CommercialOnboardingUrl"], UriKind.Absolute, out var baseUri))
+            {
+                onboardingUrl = $"{baseUri}?token={Uri.EscapeDataString(result.DevelopmentToken)}";
+            }
+            return TypedResults.Created((string?)null,
+                new CommercialOnboardingResponse(tenantId, "PendingOnboarding", onboardingUrl));
         }
 
         return result.Status switch
@@ -193,4 +204,4 @@ public sealed record CommercialOnboardingHttpRequest(
     public override string ToString() => "[REDACTED]";
 }
 
-public sealed record CommercialOnboardingResponse(Guid TenantId, string Status);
+public sealed record CommercialOnboardingResponse(Guid TenantId, string Status, string? DevelopmentOnboardingUrl = null);

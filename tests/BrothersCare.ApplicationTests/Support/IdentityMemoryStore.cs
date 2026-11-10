@@ -24,6 +24,7 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     public List<Tenant> Tenants { get; } = [];
     public List<ClinicUnit> Units { get; } = [];
     public List<Appointment> Appointments { get; } = [];
+    public List<Professional> Professionals { get; } = [];
     public List<TenantMembership> Memberships { get; } = [];
     public List<ClinicUnitMembership> UnitMemberships { get; } = [];
     public int Commits { get; private set; }
@@ -59,6 +60,12 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     public Task<User?> FindUserByIdAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(Users.SingleOrDefault(item => item.Id == userId));
     public Task<UserCredential?> FindCredentialAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(Credentials.SingleOrDefault(item => item.UserId == userId));
     public Task<UserSession?> FindSessionAsync(Guid sessionId, CancellationToken cancellationToken) => Task.FromResult(Sessions.SingleOrDefault(item => item.Id == sessionId));
+    public Task<SessionAuthenticationState?> FindSessionStateAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        var session = Sessions.SingleOrDefault(item => item.Id == sessionId);
+        var credential = session is null ? null : Credentials.SingleOrDefault(item => item.UserId == session.UserId);
+        return Task.FromResult(session is null || credential is null ? null : new SessionAuthenticationState(session, credential.Status));
+    }
     public Task<AccountActionToken?> FindTokenAsync(byte[] secretHash, CancellationToken cancellationToken) => Task.FromResult(Tokens.SingleOrDefault(item => item.SecretHash.SequenceEqual(secretHash)));
     public Task<PlatformAdministrator?> FindAdministratorAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(Administrators.SingleOrDefault(item => item.UserId == userId));
     public Task<Tenant?> FindTenantAsync(Guid tenantId, CancellationToken cancellationToken) => Task.FromResult(Tenants.SingleOrDefault(item => item.Id == tenantId));
@@ -164,11 +171,14 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
         Task.FromResult<IReadOnlyList<TenantTeamMember>>((from membership in Memberships
             join user in Users on membership.UserId equals user.Id
             where membership.TenantId == tenantId
+            let profile = Professionals.SingleOrDefault(item => item.TenantId == tenantId && item.TenantMembershipId == membership.Id)
             select new TenantTeamMember(membership.Id, user.Id, user.DisplayName, user.Email,
                 membership.Role.ToString(), membership.Status.ToString(), membership.CreatedAt,
                 (from link in UnitMemberships join unit in Units on link.ClinicUnitId equals unit.Id
                  where link.TenantId == tenantId && link.TenantMembershipId == membership.Id
-                 select new TenantTeamUnit(unit.Id, unit.Name)).ToArray())).ToArray());
+                 select new TenantTeamUnit(unit.Id, unit.Name)).ToArray(),
+                profile?.Status == ProfessionalStatus.Active, profile?.Specialty,
+                profile?.CouncilType, profile?.RegistrationNumber)).ToArray());
     public Task<int> CountActiveAdministratorsAsync(Guid tenantId, CancellationToken cancellationToken) =>
         Task.FromResult(Memberships.Count(item => item.TenantId == tenantId && item.Status == MembershipStatus.Active && item.Role == TenantMembershipRole.ClinicAdministrator));
     public Task<bool> AreUnitsActiveAsync(Guid tenantId, IReadOnlyList<Guid> unitIds, CancellationToken cancellationToken) => Task.FromResult(unitIds.All(id => Units.Any(item => item.Id == id && item.TenantId == tenantId && item.IsActive)));
@@ -191,6 +201,26 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     {
         UnitMemberships.RemoveAll(item => item.TenantId == tenantId && item.TenantMembershipId == membershipId);
         UnitMemberships.AddRange(unitIds.Select(id => new ClinicUnitMembership(Guid.NewGuid(), tenantId, id, membershipId, now)));
+        return Task.CompletedTask;
+    }
+
+    public Task SetProfessionalProfileAsync(Guid tenantId, Guid membershipId, string displayName,
+        bool performsCare, string? specialty, string? councilType, string? registrationNumber,
+        DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var profile = Professionals.SingleOrDefault(item => item.TenantId == tenantId && item.TenantMembershipId == membershipId);
+        if (!performsCare)
+        {
+            profile?.Inactivate();
+            return Task.CompletedTask;
+        }
+
+        if (profile is null)
+        {
+            profile = new Professional(Guid.NewGuid(), tenantId, displayName, specialty!, registrationNumber!, now);
+            Professionals.Add(profile);
+        }
+        profile.ConfigureForMembership(membershipId, displayName, specialty!, councilType!, registrationNumber!);
         return Task.CompletedTask;
     }
 

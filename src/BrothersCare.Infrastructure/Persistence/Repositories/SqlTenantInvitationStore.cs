@@ -1,5 +1,6 @@
 using System.Data;
 using BrothersCare.Application.Identity.Contracts;
+using BrothersCare.Domain.Care;
 using BrothersCare.Domain.Identity;
 using BrothersCare.Domain.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -65,16 +66,28 @@ public sealed class SqlTenantInvitationStore(BrothersCareDbContext dbContext) : 
                               orderby membership.Status, user.DisplayName
                               select new { membership, user }).ToListAsync(cancellationToken);
             var membershipIds = rows.Select(item => item.membership.Id).ToArray();
+            var professionalProfiles = await context.Professionals.AsNoTracking()
+                .Where(item => item.TenantId == tenantId && item.TenantMembershipId != null &&
+                    membershipIds.Contains(item.TenantMembershipId.Value))
+                .ToDictionaryAsync(item => item.TenantMembershipId!.Value, cancellationToken);
             var units = await (from link in context.ClinicUnitMemberships.AsNoTracking()
                                join unit in context.ClinicUnits.AsNoTracking()
                                    on new { link.TenantId, UnitId = link.ClinicUnitId } equals new { unit.TenantId, UnitId = unit.Id }
                                where link.TenantId == tenantId && membershipIds.Contains(link.TenantMembershipId)
                                select new { link.TenantMembershipId, unit.Id, unit.Name }).ToListAsync(cancellationToken);
-            return rows.Select(item => new TenantTeamMember(
+            return rows.Select(item =>
+            {
+                professionalProfiles.TryGetValue(item.membership.Id, out var profile);
+                return new TenantTeamMember(
                 item.membership.Id, item.user.Id, item.user.DisplayName, item.user.Email,
                 item.membership.Role.ToString(), item.membership.Status.ToString(), item.membership.CreatedAt,
                 units.Where(unit => unit.TenantMembershipId == item.membership.Id)
-                    .Select(unit => new TenantTeamUnit(unit.Id, unit.Name)).ToArray())).ToArray();
+                    .Select(unit => new TenantTeamUnit(unit.Id, unit.Name)).ToArray(),
+                profile?.Status == ProfessionalStatus.Active,
+                profile?.Specialty,
+                profile?.CouncilType,
+                profile?.RegistrationNumber);
+            }).ToArray();
         }
 
         public Task<int> CountActiveAdministratorsAsync(Guid tenantId, CancellationToken cancellationToken) =>
@@ -114,6 +127,27 @@ public sealed class SqlTenantInvitationStore(BrothersCareDbContext dbContext) : 
             {
                 context.ClinicUnitMemberships.Add(new ClinicUnitMembership(Guid.NewGuid(), tenantId, unitId, membershipId, now));
             }
+        }
+
+        public async Task SetProfessionalProfileAsync(Guid tenantId, Guid membershipId, string displayName,
+            bool performsCare, string? specialty, string? councilType, string? registrationNumber,
+            DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            var profile = await context.Professionals.SingleOrDefaultAsync(item =>
+                item.TenantId == tenantId && item.TenantMembershipId == membershipId, cancellationToken);
+            if (!performsCare)
+            {
+                profile?.Inactivate();
+                return;
+            }
+
+            if (profile is null)
+            {
+                profile = new Professional(Guid.NewGuid(), tenantId, displayName, specialty!, registrationNumber!, now);
+                context.Professionals.Add(profile);
+            }
+
+            profile.ConfigureForMembership(membershipId, displayName, specialty!, councilType!, registrationNumber!);
         }
 
         public async Task RevokePreviousInvitationsAsync(Guid membershipId, DateTimeOffset now, CancellationToken cancellationToken)

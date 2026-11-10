@@ -180,13 +180,21 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         ConfigureTenantScopedKey(entity);
         entity.Property(item => item.FullName).HasMaxLength(200).IsRequired();
         entity.Property(item => item.Specialty).HasMaxLength(150).IsRequired();
+        entity.Property(item => item.CouncilType).HasMaxLength(30);
         entity.Property(item => item.RegistrationNumber).HasMaxLength(100).IsRequired();
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
         entity.HasIndex(item => new { item.TenantId, item.RegistrationNumber }).IsUnique();
+        entity.HasIndex(item => new { item.TenantId, item.TenantMembershipId }).IsUnique()
+            .HasFilter("[TenantMembershipId] IS NOT NULL");
         entity.HasIndex(item => new { item.TenantId, item.Status, item.FullName });
         entity.HasOne<Tenant>()
             .WithMany()
             .HasForeignKey(item => item.TenantId)
+            .OnDelete(DeleteBehavior.Restrict);
+        entity.HasOne<TenantMembership>()
+            .WithMany()
+            .HasForeignKey(item => new { item.TenantId, item.TenantMembershipId })
+            .HasPrincipalKey(item => new { item.TenantId, item.Id })
             .OnDelete(DeleteBehavior.Restrict);
     }
 

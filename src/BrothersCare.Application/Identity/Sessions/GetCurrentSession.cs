@@ -26,7 +26,8 @@ public sealed class GetCurrentSession(
         }
 
         await using var transaction = await store.BeginAsync(cancellationToken);
-        var session = await transaction.FindSessionAsync(token.SessionId, cancellationToken);
+        var state = await transaction.FindSessionStateAsync(token.SessionId, cancellationToken);
+        var session = state?.Session;
         if (session is null || !tokenGenerator.Matches(secret, session.SecretHash))
         {
             return null;
@@ -40,8 +41,7 @@ public sealed class GetCurrentSession(
             return null;
         }
 
-        var credential = await transaction.FindCredentialAsync(session.UserId, cancellationToken);
-        if (credential?.Status != UserCredentialStatus.Active)
+        if (state!.CredentialStatus != UserCredentialStatus.Active)
         {
             session.Revoke(now, SessionRevocationReason.AccountDisabled);
             await transaction.CommitAsync(cancellationToken);

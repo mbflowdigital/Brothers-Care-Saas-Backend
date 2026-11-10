@@ -86,6 +86,29 @@ public sealed class CompleteOnboardingTests
         Assert.Equal(0, scenario.Store.Commits);
     }
 
+    [Fact]
+    public async Task DevelopmentBypassUsesConfiguredFirstAccessPassword()
+    {
+        var scenario = new CompletionScenario();
+
+        var result = await scenario.ExecuteAsync("Aabbcc123!", new DevelopmentOnboardingBypass("Aabbcc123!"));
+
+        Assert.Equal(OnboardingCompletionStatus.Completed, result.Status);
+        Assert.NotNull(scenario.Credential.PasswordHash);
+        Assert.True(scenario.Hasher.Verify(scenario.User, scenario.Credential.PasswordHash!, "Aabbcc123!"));
+    }
+
+    [Fact]
+    public async Task DevelopmentBypassRejectsAnyOtherWeakPassword()
+    {
+        var scenario = new CompletionScenario();
+
+        var result = await scenario.ExecuteAsync("weak", new DevelopmentOnboardingBypass("Aabbcc123!"));
+
+        Assert.Equal(OnboardingCompletionStatus.InvalidInput, result.Status);
+        Assert.Null(scenario.Credential.PasswordHash);
+    }
+
     private sealed class CompletionScenario
     {
         public CompletionScenario(bool expired = false, string? activeCredentialPassword = null)
@@ -122,8 +145,8 @@ public sealed class CompleteOnboardingTests
         public string Secret { get; }
         public CompletionStore Store { get; }
 
-        public Task<OnboardingCompletionResult> ExecuteAsync(string password = "SecurePassword123") =>
-            new CompleteOnboarding(Store, Hasher, Tokens, Clock, Audit).ExecuteAsync(new(
+        public Task<OnboardingCompletionResult> ExecuteAsync(string password = "SecurePassword123", DevelopmentOnboardingBypass? bypass = null) =>
+            new CompleteOnboarding(Store, Hasher, Tokens, Clock, Audit, bypass).ExecuteAsync(new(
                 Secret,
                 new("Administradora da Clínica", "529.982.247-25", password, password),
                 new("Clínica Exemplo Ltda.", "Clínica Exemplo", "contato@example.test", "(11) 98765-4321"),

@@ -9,9 +9,14 @@ public static class TenantListEndpoints
 {
     public static IEndpointRouteBuilder MapTenantListEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/v1/tenants", async ([FromQuery] string? search, [FromServices] ListTenants listTenants, CancellationToken ct) =>
+        endpoints.MapGet("/api/v1/tenants", async (
+            [FromQuery] string? search,
+            [FromQuery] int page,
+            [FromQuery] int pageSize,
+            [FromServices] ListTenants listTenants,
+            CancellationToken ct) =>
         {
-            return Results.Ok(await listTenants.ExecuteAsync(search, ct));
+            return Results.Ok(await listTenants.ExecuteAsync(search, page == 0 ? 1 : page, pageSize == 0 ? 10 : pageSize, ct));
         }).RequireAuthorization(IdentityPolicies.SuperAdministrator)
             .WithTags("Empresas")
             .WithName("ListTenants")

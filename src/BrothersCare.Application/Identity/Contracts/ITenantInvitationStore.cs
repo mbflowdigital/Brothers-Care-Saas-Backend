@@ -27,6 +27,8 @@ public interface ITenantInvitationTransaction : IAsyncDisposable
     void AddMembership(TenantMembership membership);
     void AddToken(AccountActionToken token);
     Task SetUnitMembershipsAsync(Guid tenantId, Guid membershipId, IReadOnlyList<Guid> unitIds, DateTimeOffset now, CancellationToken cancellationToken);
+    Task SetProfessionalProfileAsync(Guid tenantId, Guid membershipId, string displayName, bool performsCare,
+        string? specialty, string? councilType, string? registrationNumber, DateTimeOffset now, CancellationToken cancellationToken);
     Task RevokePreviousInvitationsAsync(Guid membershipId, DateTimeOffset now, CancellationToken cancellationToken);
     Task RevokeTenantSessionsAsync(Guid tenantId, Guid userId, DateTimeOffset now, CancellationToken cancellationToken);
     Task SaveAsync(CancellationToken cancellationToken);
@@ -41,6 +43,10 @@ public sealed record TenantTeamMember(
     string Role,
     string Status,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<TenantTeamUnit> Units);
+    IReadOnlyList<TenantTeamUnit> Units,
+    bool PerformsCare,
+    string? Specialty,
+    string? CouncilType,
+    string? RegistrationNumber);
 
 public sealed record TenantTeamUnit(Guid Id, string Name);
