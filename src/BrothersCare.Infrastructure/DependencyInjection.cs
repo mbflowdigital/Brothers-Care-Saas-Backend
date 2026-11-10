@@ -87,6 +87,7 @@ public static class DependencyInjection
             services.AddScoped<IClinicUnitStore, SqlClinicUnitStore>();
             services.AddScoped<ManageClinicUnits>();
             services.AddScoped<ITenantInvitationStore, SqlTenantInvitationStore>();
+            services.AddScoped<ListTenantTeam>();
             services.AddScoped<ITenantInvitationPlanUsageStore, SqlTenantInvitationPlanUsageStore>();
             services.TryAddSingleton(new ProvisionalInvitationPlanSettings(
                 // Valor provisório por empresa; substituir quando os limites dos planos forem definidos.

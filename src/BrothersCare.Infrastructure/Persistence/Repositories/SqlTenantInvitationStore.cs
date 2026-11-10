@@ -57,6 +57,26 @@ public sealed class SqlTenantInvitationStore(BrothersCareDbContext dbContext) : 
             await context.ClinicUnitMemberships.Where(item => item.TenantId == tenantId && item.TenantMembershipId == membershipId)
                 .Select(item => item.ClinicUnitId).ToListAsync(cancellationToken);
 
+        public async Task<IReadOnlyList<TenantTeamMember>> ListMembersAsync(Guid tenantId, CancellationToken cancellationToken)
+        {
+            var rows = await (from membership in context.TenantMemberships.AsNoTracking()
+                              join user in context.Users.AsNoTracking() on membership.UserId equals user.Id
+                              where membership.TenantId == tenantId
+                              orderby membership.Status, user.DisplayName
+                              select new { membership, user }).ToListAsync(cancellationToken);
+            var membershipIds = rows.Select(item => item.membership.Id).ToArray();
+            var units = await (from link in context.ClinicUnitMemberships.AsNoTracking()
+                               join unit in context.ClinicUnits.AsNoTracking()
+                                   on new { link.TenantId, UnitId = link.ClinicUnitId } equals new { unit.TenantId, UnitId = unit.Id }
+                               where link.TenantId == tenantId && membershipIds.Contains(link.TenantMembershipId)
+                               select new { link.TenantMembershipId, unit.Id, unit.Name }).ToListAsync(cancellationToken);
+            return rows.Select(item => new TenantTeamMember(
+                item.membership.Id, item.user.Id, item.user.DisplayName, item.user.Email,
+                item.membership.Role, item.membership.Status, item.membership.CreatedAt,
+                units.Where(unit => unit.TenantMembershipId == item.membership.Id)
+                    .Select(unit => new TenantTeamUnit(unit.Id, unit.Name)).ToArray())).ToArray();
+        }
+
         public async Task<bool> AreUnitsActiveAsync(Guid tenantId, IReadOnlyList<Guid> unitIds, CancellationToken cancellationToken) =>
             await context.ClinicUnits.CountAsync(item => item.TenantId == tenantId && item.IsActive && unitIds.Contains(item.Id), cancellationToken)
                 == unitIds.Count;

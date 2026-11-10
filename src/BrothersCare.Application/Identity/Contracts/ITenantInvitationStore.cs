@@ -16,6 +16,7 @@ public interface ITenantInvitationTransaction : IAsyncDisposable
     Task<TenantMembership?> FindMembershipAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken);
     Task<IReadOnlyList<Guid>> GetActiveUnitIdsAsync(Guid tenantId, Guid membershipId, CancellationToken cancellationToken);
     Task<IReadOnlyList<Guid>> GetMembershipUnitIdsAsync(Guid tenantId, Guid membershipId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TenantTeamMember>> ListMembersAsync(Guid tenantId, CancellationToken cancellationToken);
     Task<bool> AreUnitsActiveAsync(Guid tenantId, IReadOnlyList<Guid> unitIds, CancellationToken cancellationToken);
     Task<User?> FindUserAsync(string normalizedEmail, CancellationToken cancellationToken);
     Task<bool> HasCredentialAsync(Guid userId, CancellationToken cancellationToken);
@@ -29,3 +30,15 @@ public interface ITenantInvitationTransaction : IAsyncDisposable
     Task SaveAsync(CancellationToken cancellationToken);
     Task CommitAsync(CancellationToken cancellationToken);
 }
+
+public sealed record TenantTeamMember(
+    Guid MembershipId,
+    Guid UserId,
+    string DisplayName,
+    string Email,
+    TenantMembershipRole Role,
+    MembershipStatus Status,
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<TenantTeamUnit> Units);
+
+public sealed record TenantTeamUnit(Guid Id, string Name);

@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using BrothersCare.Application.Identity.Invitations;
+using BrothersCare.Application.Identity.Contracts;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -24,7 +25,35 @@ public static class InvitationEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
+        endpoints.MapGet("/api/v1/team-members", ListAsync)
+            .RequireAuthorization(IdentityPolicies.ClinicAdministrator)
+            .WithTags("Equipe")
+            .WithName("ListTenantTeam")
+            .WithSummary("Lista a equipe da empresa ativa, com papéis, unidades e status.")
+            .Produces<IReadOnlyList<TenantTeamMemberResponse>>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
         return endpoints;
+    }
+
+    private static async Task<Results<Ok<IReadOnlyList<TenantTeamMemberResponse>>, ProblemHttpResult>> ListAsync(
+        [FromServices] ListTenantTeam listTenantTeam,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var result = await listTenantTeam.ExecuteAsync(cancellationToken);
+        return result.Status switch
+        {
+            TenantTeamStatus.Success => TypedResults.Ok<IReadOnlyList<TenantTeamMemberResponse>>(result.Items.Select(item =>
+                new TenantTeamMemberResponse(item.MembershipId, item.UserId, item.DisplayName, item.Email,
+                    item.Role.ToString(), item.Status.ToString(), item.CreatedAt,
+                    item.Units.Select(unit => new TenantTeamUnitResponse(unit.Id, unit.Name)).ToArray())).ToArray()),
+            TenantTeamStatus.Forbidden => AuthenticationProblems.Create(context, StatusCodes.Status403Forbidden,
+                "Você não tem permissão para consultar a equipe desta empresa.", "forbidden"),
+            _ => AuthenticationProblems.Create(context, StatusCodes.Status401Unauthorized,
+                "Sessão ausente, inválida ou expirada.", "authentication-required"),
+        };
     }
 
     private static async Task<Results<Accepted, ProblemHttpResult>> InviteAsync(
@@ -74,3 +103,15 @@ public sealed record InviteTenantUserHttpRequest(string? Email, string? DisplayN
 {
     public override string ToString() => "[REDACTED]";
 }
+
+public sealed record TenantTeamMemberResponse(
+    Guid MembershipId,
+    Guid UserId,
+    string DisplayName,
+    string Email,
+    string Role,
+    string Status,
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<TenantTeamUnitResponse> Units);
+
+public sealed record TenantTeamUnitResponse(Guid Id, string Name);
