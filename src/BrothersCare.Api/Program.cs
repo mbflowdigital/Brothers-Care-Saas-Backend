@@ -8,11 +8,21 @@ using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 var isAdministrativeCommand = args.Contains("--bootstrap-super-administrator", StringComparer.Ordinal) ||
     args.Contains("--issue-super-administrator-activation-token", StringComparer.Ordinal);
+
+if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing"))
+{
+    var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtectionKeys");
+    Directory.CreateDirectory(dataProtectionKeysPath);
+    builder.Services.AddDataProtection()
+        .SetApplicationName("BrothersCare.Api")
+        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+}
 
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks();
