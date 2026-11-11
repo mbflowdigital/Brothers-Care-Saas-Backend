@@ -28,7 +28,7 @@ public static class AntiforgeryConfiguration
             options.Cookie.Path = "/api";
             options.Cookie.HttpOnly = true;
             options.Cookie.IsEssential = true;
-            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SameSite = secure ? SameSiteMode.None : SameSiteMode.Lax;
             options.Cookie.SecurePolicy = secure ? CookieSecurePolicy.Always : CookieSecurePolicy.None;
         });
         return services;

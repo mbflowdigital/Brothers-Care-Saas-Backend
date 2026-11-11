@@ -3,6 +3,7 @@ namespace BrothersCare.Api.Identity;
 public sealed class SessionCookie
 {
     private readonly bool secure;
+    private readonly SameSiteMode sameSite;
 
     public SessionCookie(IConfiguration configuration, IHostEnvironment environment)
     {
@@ -19,6 +20,8 @@ public sealed class SessionCookie
         {
             throw new InvalidOperationException("Session cookies must be secure outside Development.");
         }
+
+        sameSite = secure ? SameSiteMode.None : SameSiteMode.Lax;
     }
 
     public string Name { get; }
@@ -47,7 +50,7 @@ public sealed class SessionCookie
     {
         HttpOnly = true,
         Secure = secure,
-        SameSite = SameSiteMode.Lax,
+        SameSite = sameSite,
         Path = "/api",
         IsEssential = true,
     };
