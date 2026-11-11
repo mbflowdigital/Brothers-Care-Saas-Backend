@@ -92,6 +92,9 @@ jobs:
           port: 21
           local-dir: ./publish/
           server-dir: /
+          exclude: |
+            **/App_Data/**
+            **/logs/**
 
       - name: Start API after deployment
         if: always()
