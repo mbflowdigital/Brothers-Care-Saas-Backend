@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using BrothersCare.Application.Identity.Invitations;
 using BrothersCare.Application.Identity.Contracts;
+using BrothersCare.Application.Identity.Invitations;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
