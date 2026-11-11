@@ -18,11 +18,6 @@ public sealed class ResendCommercialOnboardingInvitation(
             return new(CommercialOnboardingResendStatus.NotFound);
         }
 
-        if (invitationSender is null)
-        {
-            return new(CommercialOnboardingResendStatus.DeliveryUnavailable);
-        }
-
         await using var transaction = await store.BeginAsync(cancellationToken);
         var invitation = await transaction.FindPendingInvitationAsync(tenantId, cancellationToken);
         if (invitation is null || invitation.Tenant.Status != TenantStatus.PendingOnboarding ||
@@ -40,9 +35,12 @@ public sealed class ResendCommercialOnboardingInvitation(
             Guid.NewGuid(), invitation.User.Id, AccountActionTokenPurpose.CommercialOnboarding,
             generatedToken.SecretHash, now, expiresAt, invitation.Membership.Id));
         await transaction.SaveAsync(cancellationToken);
-        await invitationSender.SendAsync(new InvitationDelivery(
-            invitation.User.Email, invitation.User.DisplayName, invitation.Tenant.Name,
-            generatedToken.Secret, expiresAt), cancellationToken);
+        if (invitationSender is not null)
+        {
+            await invitationSender.SendAsync(new InvitationDelivery(
+                invitation.User.Email, invitation.User.DisplayName, invitation.Tenant.Name,
+                generatedToken.Secret, expiresAt), cancellationToken);
+        }
         await transaction.CommitAsync(cancellationToken);
         return new(CommercialOnboardingResendStatus.Accepted, generatedToken.Secret);
     }
