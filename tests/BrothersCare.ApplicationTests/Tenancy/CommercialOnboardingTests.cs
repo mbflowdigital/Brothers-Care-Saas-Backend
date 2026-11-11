@@ -78,10 +78,13 @@ public sealed class CommercialOnboardingTests
 
         var result = await Resend(scenario).ExecuteAsync(created.TenantId!.Value, CancellationToken.None);
 
-        Assert.Equal(CommercialOnboardingResendStatus.Accepted, result);
+        Assert.Equal(CommercialOnboardingResendStatus.Accepted, result.Status);
+        Assert.NotNull(result.Token);
         Assert.NotNull(previousToken.RevokedAt);
         Assert.Equal(2, scenario.Invitations.Count);
-        Assert.Single(scenario.Store.Tokens, token => token.Purpose == AccountActionTokenPurpose.CommercialOnboarding && token.RevokedAt is null);
+        var activeToken = Assert.Single(scenario.Store.Tokens,
+            token => token.Purpose == AccountActionTokenPurpose.CommercialOnboarding && token.RevokedAt is null);
+        Assert.True(scenario.Tokens.Matches(result.Token!, activeToken.SecretHash));
     }
 
     private static CreateCommercialOnboarding Create(IdentityScenario scenario) =>

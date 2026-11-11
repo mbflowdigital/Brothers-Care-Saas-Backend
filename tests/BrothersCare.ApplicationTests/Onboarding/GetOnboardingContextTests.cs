@@ -17,7 +17,7 @@ public sealed class GetOnboardingContextTests
             clock.GetUtcNow().AddMinutes(30))));
         var useCase = new GetOnboardingContext(source, tokenGenerator, clock);
 
-        var result = await useCase.ExecuteAsync(token.Secret, CancellationToken.None);
+        var result = await useCase.ExecuteAsync(token.Secret, "11.222.333/0001-81", CancellationToken.None);
 
         Assert.Equal(OnboardingContextStatus.Ready, result.Status);
         Assert.Equal("admin@example.test", result.Context?.Email);
@@ -40,7 +40,7 @@ public sealed class GetOnboardingContextTests
         var useCase = new GetOnboardingContext(
             new StubSource(new(sourceStatus)), tokenGenerator, new TestClock());
 
-        var result = await useCase.ExecuteAsync(tokenGenerator.Generate().Secret, CancellationToken.None);
+        var result = await useCase.ExecuteAsync(tokenGenerator.Generate().Secret, "11.222.333/0001-81", CancellationToken.None);
 
         Assert.Equal(expectedStatus, result.Status);
         Assert.Null(result.Context);
@@ -52,7 +52,7 @@ public sealed class GetOnboardingContextTests
         var source = new StubSource(new(CommercialOnboardingLookupStatus.Ready));
         var useCase = new GetOnboardingContext(source, new TestTokenGenerator(), new TestClock());
 
-        var result = await useCase.ExecuteAsync("not-a-valid-token", CancellationToken.None);
+        var result = await useCase.ExecuteAsync("not-a-valid-token", "11.222.333/0001-81", CancellationToken.None);
 
         Assert.Equal(OnboardingContextStatus.Invalid, result.Status);
         Assert.Null(source.ReceivedHash);
@@ -68,9 +68,26 @@ public sealed class GetOnboardingContextTests
             clock.GetUtcNow().AddSeconds(-1))));
         var useCase = new GetOnboardingContext(source, tokenGenerator, clock);
 
-        var result = await useCase.ExecuteAsync(tokenGenerator.Generate().Secret, CancellationToken.None);
+        var result = await useCase.ExecuteAsync(tokenGenerator.Generate().Secret, "11.222.333/0001-81", CancellationToken.None);
 
         Assert.Equal(OnboardingContextStatus.Expired, result.Status);
+        Assert.Null(result.Context);
+    }
+
+    [Fact]
+    public async Task MismatchedCnpjDoesNotRevealTheOnboardingContext()
+    {
+        var clock = new TestClock();
+        var tokenGenerator = new TestTokenGenerator();
+        var token = tokenGenerator.Generate();
+        var source = new StubSource(new(CommercialOnboardingLookupStatus.Ready, new(
+            Guid.NewGuid(), "admin@example.test", "11222333000181", "Clínica Exemplo",
+            clock.GetUtcNow().AddMinutes(30))));
+        var useCase = new GetOnboardingContext(source, tokenGenerator, clock);
+
+        var result = await useCase.ExecuteAsync(token.Secret, "38.416.176/0001-00", CancellationToken.None);
+
+        Assert.Equal(OnboardingContextStatus.CnpjMismatch, result.Status);
         Assert.Null(result.Context);
     }
 

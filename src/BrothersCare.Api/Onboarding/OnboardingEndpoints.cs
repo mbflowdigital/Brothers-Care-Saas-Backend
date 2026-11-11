@@ -41,7 +41,7 @@ public static class OnboardingEndpoints
         CancellationToken cancellationToken)
     {
         context.Response.Headers.CacheControl = "no-store";
-        var result = await getContext.ExecuteAsync(request?.Token, cancellationToken);
+        var result = await getContext.ExecuteAsync(request?.Token, request?.Cnpj, cancellationToken);
         if (result.Status == OnboardingContextStatus.Ready && result.Context is { } onboarding)
         {
             return TypedResults.Ok(new OnboardingContextResponse(
@@ -58,6 +58,8 @@ public static class OnboardingEndpoints
                 "Este convite já foi utilizado.", "used-onboarding-token"),
             OnboardingContextStatus.Unavailable => Problem(context, StatusCodes.Status503ServiceUnavailable,
                 "O serviço de onboarding está temporariamente indisponível.", "onboarding-unavailable"),
+            OnboardingContextStatus.CnpjMismatch => Problem(context, StatusCodes.Status400BadRequest,
+                "O CNPJ não corresponde ao pré-cadastro deste convite.", "onboarding-cnpj-mismatch"),
             _ => Problem(context, StatusCodes.Status400BadRequest,
                 "Este convite não é válido.", "invalid-onboarding-token"),
         };
@@ -88,6 +90,7 @@ public static class OnboardingEndpoints
 
         var result = await completeOnboarding.ExecuteAsync(new CompleteOnboardingCommand(
             request.Token ?? string.Empty,
+            request.Cnpj ?? string.Empty,
             new OnboardingAdministratorData(
                 request.Administrator.DisplayName ?? string.Empty,
                 request.Administrator.Cpf ?? string.Empty,
@@ -126,6 +129,8 @@ public static class OnboardingEndpoints
                 "Este onboarding não pode ser concluído no estado atual.", "invalid-onboarding-state"),
             OnboardingCompletionStatus.InvalidToken => Problem(context, StatusCodes.Status400BadRequest,
                 "Este convite não é válido.", "invalid-onboarding-token"),
+            OnboardingCompletionStatus.CnpjMismatch => Problem(context, StatusCodes.Status400BadRequest,
+                "O CNPJ não corresponde ao pré-cadastro deste convite.", "onboarding-cnpj-mismatch"),
             _ => Problem(context, StatusCodes.Status400BadRequest,
                 "Revise os dados informados.", "validation"),
         };
@@ -133,7 +138,7 @@ public static class OnboardingEndpoints
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record OnboardingContextRequest(string? Token)
+public sealed record OnboardingContextRequest(string? Token, string? Cnpj)
 {
     public override string ToString() => "[REDACTED]";
 }
@@ -147,6 +152,7 @@ public sealed record OnboardingContextResponse(
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record OnboardingCompletionRequest(
     string? Token,
+    string? Cnpj,
     OnboardingAdministratorRequest? Administrator,
     OnboardingCompanyRequest? Company,
     OnboardingClinicUnitRequest? ClinicUnit)

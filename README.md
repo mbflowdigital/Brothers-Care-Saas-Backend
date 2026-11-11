@@ -52,6 +52,8 @@ dotnet ef database update --project src/BrothersCare.Infrastructure --startup-pr
 
 ## Primeiro superadministrador
 
+Para ambientes controlados de MVP, a aplicação também pode provisionar um superadministrador fixo na inicialização. O alias `admin` está habilitado na configuração base e, em `Development`, o projeto configura o acesso local `admin` / `admin`. Fora de `Development`, a senha não é gravada no arquivo-base e o provisionamento automático fica desligado; a credencial já existente no banco é preservada. O provisionamento é idempotente e só ocorre quando `ProvisionOnStartup` também estiver habilitado.
+
 Depois de aplicar a migração que inclui `platform_administrators`, o primeiro superadministrador pode ser provisionado sem gravar dados pessoais ou credenciais no repositório. Configure somente no ambiente seguro onde o comando será executado:
 
 ```powershell
