@@ -11,16 +11,16 @@ public sealed class ResendCommercialOnboardingInvitation(
     ICommercialOnboardingSender? invitationSender,
     TimeProvider timeProvider)
 {
-    public async Task<CommercialOnboardingResendStatus> ExecuteAsync(Guid tenantId, CancellationToken cancellationToken)
+    public async Task<CommercialOnboardingResendResult> ExecuteAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         if (tenantId == Guid.Empty)
         {
-            return CommercialOnboardingResendStatus.NotFound;
+            return new(CommercialOnboardingResendStatus.NotFound);
         }
 
         if (invitationSender is null)
         {
-            return CommercialOnboardingResendStatus.DeliveryUnavailable;
+            return new(CommercialOnboardingResendStatus.DeliveryUnavailable);
         }
 
         await using var transaction = await store.BeginAsync(cancellationToken);
@@ -29,7 +29,7 @@ public sealed class ResendCommercialOnboardingInvitation(
             invitation.Membership.Status != MembershipStatus.Invited ||
             invitation.Membership.Role != TenantMembershipRole.ClinicAdministrator)
         {
-            return CommercialOnboardingResendStatus.NotFound;
+            return new(CommercialOnboardingResendStatus.NotFound);
         }
 
         var now = timeProvider.GetUtcNow();
@@ -44,8 +44,15 @@ public sealed class ResendCommercialOnboardingInvitation(
             invitation.User.Email, invitation.User.DisplayName, invitation.Tenant.Name,
             generatedToken.Secret, expiresAt), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return CommercialOnboardingResendStatus.Accepted;
+        return new(CommercialOnboardingResendStatus.Accepted, generatedToken.Secret);
     }
+}
+
+public sealed record CommercialOnboardingResendResult(
+    CommercialOnboardingResendStatus Status,
+    string? Token = null)
+{
+    public override string ToString() => "[REDACTED]";
 }
 
 public enum CommercialOnboardingResendStatus

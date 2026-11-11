@@ -66,12 +66,6 @@ public static class DependencyInjection
             services.AddScoped<ICommercialOnboardingSource, SqlCommercialOnboardingSource>();
             services.AddScoped<GetOnboardingContext>();
             services.AddScoped<IOnboardingCompletionStore, SqlOnboardingCompletionStore>();
-            var onboardingBypass = configuration.GetSection("DevelopmentTenantAdministratorBypass");
-            if (onboardingBypass.GetValue("Enabled", false) && !string.IsNullOrWhiteSpace(onboardingBypass["Password"]))
-            {
-                services.AddSingleton(new DevelopmentOnboardingBypass(onboardingBypass["Password"]!));
-                services.AddSingleton(new DevelopmentCommercialOnboardingBypass());
-            }
             services.AddScoped<CompleteOnboarding>();
             services.AddScoped<ITenantProvisioningStore, SqlTenantProvisioningStore>();
             services.AddScoped<ICommercialOnboardingStore, SqlCommercialOnboardingStore>();
@@ -79,8 +73,7 @@ public static class DependencyInjection
                 provider.GetRequiredService<ICommercialOnboardingStore>(),
                 provider.GetRequiredService<ITokenGenerator>(),
                 provider.GetService<ICommercialOnboardingSender>(),
-                provider.GetRequiredService<TimeProvider>(),
-                provider.GetService<DevelopmentCommercialOnboardingBypass>()));
+                provider.GetRequiredService<TimeProvider>()));
             services.AddScoped(provider => new ResendCommercialOnboardingInvitation(
                 provider.GetRequiredService<ICommercialOnboardingStore>(),
                 provider.GetRequiredService<ITokenGenerator>(),

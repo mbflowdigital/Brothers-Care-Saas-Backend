@@ -87,26 +87,31 @@ public sealed class CompleteOnboardingTests
     }
 
     [Fact]
-    public async Task DevelopmentBypassUsesConfiguredFirstAccessPassword()
+    public async Task CnpjMustMatchTheTenantBeforeCompletion()
     {
         var scenario = new CompletionScenario();
 
-        var result = await scenario.ExecuteAsync("Aabbcc123!", new DevelopmentOnboardingBypass("Aabbcc123!"));
+        var result = await scenario.ExecuteAsync(cnpj: "38.416.176/0001-00");
 
-        Assert.Equal(OnboardingCompletionStatus.Completed, result.Status);
-        Assert.NotNull(scenario.Credential.PasswordHash);
-        Assert.True(scenario.Hasher.Verify(scenario.User, scenario.Credential.PasswordHash!, "Aabbcc123!"));
+        Assert.Equal(OnboardingCompletionStatus.CnpjMismatch, result.Status);
+        Assert.Equal(TenantStatus.PendingOnboarding, scenario.Tenant.Status);
+        Assert.Empty(scenario.Store.Units);
+        Assert.Equal(0, scenario.Store.Commits);
+        Assert.Null(scenario.Credential.PasswordHash);
     }
 
-    [Fact]
-    public async Task DevelopmentBypassRejectsAnyOtherWeakPassword()
+    [Theory]
+    [InlineData("Aabbcc123!")]
+    [InlineData("weak")]
+    public async Task WeakPasswordIsRejectedInEveryEnvironment(string password)
     {
         var scenario = new CompletionScenario();
 
-        var result = await scenario.ExecuteAsync("weak", new DevelopmentOnboardingBypass("Aabbcc123!"));
+        var result = await scenario.ExecuteAsync(password);
 
         Assert.Equal(OnboardingCompletionStatus.InvalidInput, result.Status);
         Assert.Null(scenario.Credential.PasswordHash);
+        Assert.Equal(0, scenario.Store.Commits);
     }
 
     private sealed class CompletionScenario
@@ -145,9 +150,11 @@ public sealed class CompleteOnboardingTests
         public string Secret { get; }
         public CompletionStore Store { get; }
 
-        public Task<OnboardingCompletionResult> ExecuteAsync(string password = "SecurePassword123", DevelopmentOnboardingBypass? bypass = null) =>
-            new CompleteOnboarding(Store, Hasher, Tokens, Clock, Audit, bypass).ExecuteAsync(new(
+        public Task<OnboardingCompletionResult> ExecuteAsync(
+            string password = "SecurePassword123", string cnpj = "11.222.333/0001-81") =>
+            new CompleteOnboarding(Store, Hasher, Tokens, Clock, Audit).ExecuteAsync(new(
                 Secret,
+                cnpj,
                 new("Administradora da Clínica", "529.982.247-25", password, password),
                 new("Clínica Exemplo Ltda.", "Clínica Exemplo", "contato@example.test", "(11) 98765-4321"),
                 new("Unidade Matriz", "01310-100", "Avenida Paulista", "1000", null,

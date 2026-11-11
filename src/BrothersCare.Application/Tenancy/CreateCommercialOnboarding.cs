@@ -10,8 +10,7 @@ public sealed class CreateCommercialOnboarding(
     ICommercialOnboardingStore store,
     ITokenGenerator tokenGenerator,
     ICommercialOnboardingSender? invitationSender,
-    TimeProvider timeProvider,
-    DevelopmentCommercialOnboardingBypass? developmentBypass = null)
+    TimeProvider timeProvider)
 {
     public async Task<CommercialOnboardingResult> ExecuteAsync(
         CreateCommercialOnboardingCommand command,
@@ -23,7 +22,7 @@ public sealed class CreateCommercialOnboarding(
             return new(CommercialOnboardingStatus.InvalidInput);
         }
 
-        if (invitationSender is null && developmentBypass is null)
+        if (invitationSender is null)
         {
             return new(CommercialOnboardingStatus.DeliveryUnavailable);
         }
@@ -61,21 +60,10 @@ public sealed class CreateCommercialOnboarding(
             generatedToken.SecretHash, now, expiresAt, membership.Id));
 
         await transaction.SaveAsync(cancellationToken);
-        if (invitationSender is not null)
-        {
-            try
-            {
-                await invitationSender.SendAsync(new InvitationDelivery(
-                    email, command.ResponsibleName.Trim(), tenant.Name, generatedToken.Secret, expiresAt), cancellationToken);
-            }
-            catch when (developmentBypass is not null)
-            {
-                // Development keeps the generated link available in the Super Admin screen.
-            }
-        }
+        await invitationSender.SendAsync(new InvitationDelivery(
+            email, command.ResponsibleName.Trim(), tenant.Name, generatedToken.Secret, expiresAt), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new(CommercialOnboardingStatus.Created, tenant.Id,
-            developmentBypass is null ? null : generatedToken.Secret);
+        return new(CommercialOnboardingStatus.Created, tenant.Id, generatedToken.Secret);
     }
 
     private static bool TryValidate(CreateCommercialOnboardingCommand command, out string? cnpj)
@@ -128,5 +116,3 @@ public sealed record CommercialOnboardingResult(
 {
     public override string ToString() => "[REDACTED]";
 }
-
-public sealed record DevelopmentCommercialOnboardingBypass;

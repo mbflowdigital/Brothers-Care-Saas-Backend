@@ -79,9 +79,8 @@ public static class AuthEndpoints
         }
 
         var cpf = request?.Cpf;
-        var fixedAdministrator = configuration.GetSection("DevelopmentSuperAdministrator");
-        if (context.RequestServices.GetRequiredService<IHostEnvironment>().IsDevelopment() &&
-            fixedAdministrator.GetValue("Enabled", false) &&
+        var fixedAdministrator = configuration.GetSection("Bootstrap:FixedSuperAdministrator");
+        if (fixedAdministrator.GetValue("Enabled", false) &&
             string.Equals(cpf, fixedAdministrator["UserName"], StringComparison.Ordinal))
         {
             cpf = fixedAdministrator["Cpf"];

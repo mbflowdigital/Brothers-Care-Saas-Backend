@@ -46,7 +46,15 @@ public sealed class RealOnboardingFlowTests
                 Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
             }
 
-            using (var context = await PostAsync(client, "/api/v1/onboarding/context", new { token }, csrf))
+            using (var wrongCnpj = await PostAsync(client, "/api/v1/onboarding/context",
+                       new { token, cnpj = "38.416.176/0001-00" }, csrf))
+            {
+                Assert.Equal(HttpStatusCode.BadRequest, wrongCnpj.StatusCode);
+                Assert.Equal("onboarding-cnpj-mismatch", await ReadProblemTypeAsync(wrongCnpj));
+            }
+
+            using (var context = await PostAsync(client, "/api/v1/onboarding/context",
+                       new { token, cnpj = successful.Cnpj }, csrf))
             {
                 Assert.Equal(HttpStatusCode.OK, context.StatusCode);
             }
@@ -64,7 +72,8 @@ public sealed class RealOnboardingFlowTests
                 Assert.Equal("used-onboarding-token", await ReadProblemTypeAsync(repeated));
             }
 
-            using (var usedContext = await PostAsync(client, "/api/v1/onboarding/context", new { token }, csrf))
+            using (var usedContext = await PostAsync(client, "/api/v1/onboarding/context",
+                       new { token, cnpj = successful.Cnpj }, csrf))
             {
                 Assert.Equal(HttpStatusCode.Conflict, usedContext.StatusCode);
                 Assert.Equal("used-onboarding-token", await ReadProblemTypeAsync(usedContext));
@@ -103,7 +112,7 @@ public sealed class RealOnboardingFlowTests
             var expiredToken = factory.Sender.TakeToken(expired.Email);
             await ExpireTokenAsync(factory, expiredTenant);
             using (var response = await PostAsync(anonymousClient, "/api/v1/onboarding/context",
-                       new { token = expiredToken }, csrf))
+                       new { token = expiredToken, cnpj = expired.Cnpj }, csrf))
             {
                 Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
                 Assert.Equal("expired-onboarding-token", await ReadProblemTypeAsync(response));
@@ -116,7 +125,7 @@ public sealed class RealOnboardingFlowTests
             var revokedToken = factory.Sender.TakeToken(revoked.Email);
             await RevokeTokenAsync(factory, revokedTenant);
             using (var response = await PostAsync(anonymousClient, "/api/v1/onboarding/context",
-                       new { token = revokedToken }, csrf))
+                       new { token = revokedToken, cnpj = revoked.Cnpj }, csrf))
             {
                 Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
                 Assert.Equal("revoked-onboarding-token", await ReadProblemTypeAsync(response));
@@ -275,7 +284,6 @@ public sealed class RealOnboardingFlowTests
                 new Dictionary<string, string?>
                 {
                     ["ConnectionStrings:BrothersCare"] = connectionString,
-                    ["CommercialOnboarding:AllowSimulatedPayment"] = "true",
                     ["Email:Smtp:Enabled"] = "false",
                     ["Authentication:CookieSecure"] = "false",
                     ["Logging:LogLevel:Default"] = "Warning",
@@ -337,6 +345,7 @@ public sealed class RealOnboardingFlowTests
         public object CompletionRequest(string token) => new
         {
             token,
+            cnpj = Cnpj,
             administrator = new { displayName = "Administradora de Teste", cpf = Cpf, password = Password, passwordConfirmation = Password },
             company = new { legalName = $"{CompanyName} Ltda.", tradeName = CompanyName, commercialEmail = Email, phone = "11987654321" },
             clinicUnit = new { name = "Unidade Matriz", postalCode = "01310100", street = "Avenida Paulista", number = "1000", complement = (string?)null, district = "Bela Vista", city = "São Paulo", state = "SP", phone = "1133334444" },

@@ -1,3 +1,4 @@
+using System.Data;
 using BrothersCare.Application.Tenancy;
 using BrothersCare.Domain.Identity;
 using BrothersCare.Domain.Tenancy;
@@ -45,6 +46,39 @@ public sealed class SqlTenantPreRegistrationStore(BrothersCareDbContext dbContex
             .ToListAsync(cancellationToken);
         foreach (var token in tokens) token.Revoke(now);
         await dbContext.SaveChangesAsync(cancellationToken);
+        return TenantPreRegistrationStatus.Completed;
+    }
+
+    public async Task<TenantPreRegistrationStatus> DeleteAsync(
+        Guid tenantId, CancellationToken cancellationToken)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable, cancellationToken);
+        var tenant = await dbContext.Tenants.SingleOrDefaultAsync(item => item.Id == tenantId, cancellationToken);
+        if (tenant is null) return TenantPreRegistrationStatus.NotFound;
+        if (tenant.Status is not (TenantStatus.PendingOnboarding or TenantStatus.Deactivated) ||
+            await dbContext.ClinicUnits.AnyAsync(item => item.TenantId == tenantId, cancellationToken))
+        {
+            return TenantPreRegistrationStatus.InvalidState;
+        }
+
+        var memberships = await dbContext.TenantMemberships
+            .Where(item => item.TenantId == tenantId)
+            .ToListAsync(cancellationToken);
+        var membershipIds = memberships.Select(item => item.Id).ToArray();
+        var tokens = await dbContext.AccountActionTokens
+            .Where(item => item.TenantMembershipId != null && membershipIds.Contains(item.TenantMembershipId.Value))
+            .ToListAsync(cancellationToken);
+        var unitMemberships = await dbContext.ClinicUnitMemberships
+            .Where(item => item.TenantId == tenantId)
+            .ToListAsync(cancellationToken);
+
+        dbContext.AccountActionTokens.RemoveRange(tokens);
+        dbContext.ClinicUnitMemberships.RemoveRange(unitMemberships);
+        dbContext.TenantMemberships.RemoveRange(memberships);
+        dbContext.Tenants.Remove(tenant);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return TenantPreRegistrationStatus.Completed;
     }
 

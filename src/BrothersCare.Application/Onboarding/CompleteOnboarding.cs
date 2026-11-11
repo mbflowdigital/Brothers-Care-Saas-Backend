@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Application.Onboarding.Contracts;
 using BrothersCare.Domain.Identity;
@@ -12,15 +10,14 @@ public sealed class CompleteOnboarding(
     IPasswordHasher passwordHasher,
     ITokenGenerator tokenGenerator,
     TimeProvider timeProvider,
-    IAuthenticationAudit audit,
-    DevelopmentOnboardingBypass? developmentBypass = null)
+    IAuthenticationAudit audit)
 {
     public async Task<OnboardingCompletionResult> ExecuteAsync(
         CompleteOnboardingCommand command,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
-        if (!TryValidateRequest(command, out var cpf, out var tokenHash))
+        if (!TryValidateRequest(command, out var cpf, out var cnpj, out var tokenHash))
         {
             return new(OnboardingCompletionStatus.InvalidInput);
         }
@@ -53,6 +50,11 @@ public sealed class CompleteOnboarding(
             await transaction.HasClinicUnitAsync(tenant.Id, cancellationToken))
         {
             return new(OnboardingCompletionStatus.InvalidState);
+        }
+
+        if (!string.Equals(tenant.Cnpj, cnpj, StringComparison.Ordinal))
+        {
+            return new(OnboardingCompletionStatus.CnpjMismatch);
         }
 
         var existingCpf = await transaction.FindUserByCpfAsync(cpf!, cancellationToken);
@@ -141,9 +143,11 @@ public sealed class CompleteOnboarding(
         return OnboardingCompletionStatus.Completed;
     }
 
-    private bool TryValidateRequest(CompleteOnboardingCommand command, out string? cpf, out byte[]? tokenHash)
+    private bool TryValidateRequest(
+        CompleteOnboardingCommand command, out string? cpf, out string? cnpj, out byte[]? tokenHash)
     {
         cpf = null;
+        cnpj = null;
         tokenHash = null;
         if (string.IsNullOrWhiteSpace(command.Token) || command.Token.Length > 512 ||
             !tokenGenerator.TryHash(command.Token, out tokenHash) ||
@@ -163,6 +167,7 @@ public sealed class CompleteOnboarding(
         try
         {
             cpf = User.NormalizeCpf(command.Administrator.Cpf);
+            cnpj = Tenant.NormalizeCnpj(command.Cnpj);
             return true;
         }
         catch (ArgumentException)
@@ -171,25 +176,18 @@ public sealed class CompleteOnboarding(
         }
     }
 
-    private bool IsValidPassword(string password, string confirmation)
-    {
-        if (developmentBypass is not null &&
-            CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(password), Encoding.UTF8.GetBytes(developmentBypass.Password)) &&
-            CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(password), Encoding.UTF8.GetBytes(confirmation)))
-            return true;
-        return password.Length is >= 12 and <= 128 && confirmation.Length <= 128 &&
-            password.Any(char.IsLetter) && password.Any(char.IsDigit) &&
-            CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(password), Encoding.UTF8.GetBytes(confirmation));
-    }
+    private static bool IsValidPassword(string password, string confirmation) =>
+        password.Length is >= 12 and <= 128 && confirmation.Length <= 128 &&
+        password.Any(char.IsUpper) && password.Any(char.IsLower) && password.Any(char.IsDigit) &&
+        string.Equals(password, confirmation, StringComparison.Ordinal);
 
     private static bool IsRequired(string? value, int maximumLength) =>
         !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= maximumLength;
 }
 
-public sealed record DevelopmentOnboardingBypass(string Password);
-
 public sealed record CompleteOnboardingCommand(
     string Token,
+    string Cnpj,
     OnboardingAdministratorData Administrator,
     OnboardingCompanyData Company,
     OnboardingClinicUnitData ClinicUnit)
@@ -240,6 +238,7 @@ public enum OnboardingCompletionStatus
     CpfUnavailable = 7,
     InvalidCredentials = 8,
     InvalidState = 9,
+    CnpjMismatch = 10,
 }
 
 public sealed record OnboardingCompletionResult(OnboardingCompletionStatus Status, Guid? TenantId = null);

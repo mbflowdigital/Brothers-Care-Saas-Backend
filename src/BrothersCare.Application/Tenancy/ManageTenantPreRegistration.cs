@@ -8,6 +8,7 @@ public interface ITenantPreRegistrationStore
     Task<bool> CnpjBelongsToAnotherTenantAsync(Guid tenantId, string cnpj, CancellationToken cancellationToken);
     Task<TenantPreRegistrationStatus> UpdateAsync(Guid tenantId, TenantPreRegistrationInput input, CancellationToken cancellationToken);
     Task<TenantPreRegistrationStatus> CancelAsync(Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<TenantPreRegistrationStatus> DeleteAsync(Guid tenantId, CancellationToken cancellationToken);
 }
 
 public sealed record TenantPreRegistrationDetails(
@@ -50,6 +51,11 @@ public sealed class ManageTenantPreRegistration(ITenantPreRegistrationStore stor
         tenantId == Guid.Empty
             ? Task.FromResult(TenantPreRegistrationStatus.NotFound)
             : store.CancelAsync(tenantId, timeProvider.GetUtcNow(), cancellationToken);
+
+    public Task<TenantPreRegistrationStatus> DeleteAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        tenantId == Guid.Empty
+            ? Task.FromResult(TenantPreRegistrationStatus.NotFound)
+            : store.DeleteAsync(tenantId, cancellationToken);
 
     private static bool TryValidate(TenantPreRegistrationInput input, out string? cnpj)
     {

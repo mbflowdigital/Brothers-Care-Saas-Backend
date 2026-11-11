@@ -3,6 +3,7 @@ using BrothersCare.Api.Identity;
 using BrothersCare.Application.Tenancy;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace BrothersCare.Api.Tenancy;
 
@@ -11,7 +12,7 @@ public static class CommercialOnboardingEndpoints
     public static IEndpointRouteBuilder MapCommercialOnboardingEndpoints(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
-        endpoints.MapPost("/api/v1/commercial-onboardings/simulated-payment", CreateAsync)
+        endpoints.MapPost("/api/v1/commercial-onboardings/simulated-payment", CreateSimulatedAsync)
             .AllowAnonymous()
             .WithTags("Onboarding comercial")
             .WithName("CreateSimulatedCommercialOnboarding")
@@ -22,7 +23,7 @@ public static class CommercialOnboardingEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
-        endpoints.MapPost("/api/v1/commercial-onboardings/{tenantId:guid}/resend-simulated-invitation", ResendAsync)
+        endpoints.MapPost("/api/v1/commercial-onboardings/{tenantId:guid}/resend-simulated-invitation", ResendSimulatedAsync)
             .AllowAnonymous()
             .WithTags("Onboarding comercial")
             .WithName("ResendSimulatedCommercialOnboardingInvitation")
@@ -38,19 +39,27 @@ public static class CommercialOnboardingEndpoints
         preRegistrations.MapGet("/{tenantId:guid}", GetPreRegistrationAsync).WithName("GetTenantPreRegistration");
         preRegistrations.MapPut("/{tenantId:guid}", UpdatePreRegistrationAsync).WithName("UpdateTenantPreRegistration");
         preRegistrations.MapDelete("/{tenantId:guid}", CancelPreRegistrationAsync).WithName("CancelTenantPreRegistration");
-        preRegistrations.MapPost("/{tenantId:guid}/resend", ResendProtectedAsync).WithName("ResendTenantPreRegistration");
+        preRegistrations.MapDelete("/{tenantId:guid}/permanent", DeletePreRegistrationAsync)
+            .WithName("DeleteTenantPreRegistration")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+        preRegistrations.MapPost("/{tenantId:guid}/resend", ResendProtectedAsync)
+            .WithName("ResendTenantPreRegistration")
+            .Produces<CommercialOnboardingResendResponse>(StatusCodes.Status202Accepted)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
         return endpoints;
     }
 
     private static Task<Results<Created<CommercialOnboardingResponse>, ProblemHttpResult>> CreatePreRegistrationAsync(
         [FromBody] CommercialOnboardingHttpRequest? request,
         [FromServices] CreateCommercialOnboarding createCommercialOnboarding,
-        [FromServices] IHostEnvironment environment,
         [FromServices] IConfiguration configuration,
         HttpContext context,
-        CancellationToken cancellationToken) => CreateCoreAsync(request, createCommercialOnboarding, environment, configuration, context, cancellationToken);
+        CancellationToken cancellationToken) => CreateCoreAsync(request, createCommercialOnboarding, configuration, context, exposeOnboardingUrl: true, cancellationToken);
 
-    private static async Task<Results<Created<CommercialOnboardingResponse>, ProblemHttpResult>> CreateAsync(
+    private static async Task<Results<Created<CommercialOnboardingResponse>, ProblemHttpResult>> CreateSimulatedAsync(
         [FromBody] CommercialOnboardingHttpRequest? request,
         [FromServices] CreateCommercialOnboarding createCommercialOnboarding,
         [FromServices] IHostEnvironment environment,
@@ -71,17 +80,19 @@ public static class CommercialOnboardingEndpoints
                 "Informe os dados da empresa e da pessoa responsável.", "validation");
         }
 
-        return await CreateCoreAsync(request, createCommercialOnboarding, environment, configuration, context, cancellationToken);
+        return await CreateCoreAsync(request, createCommercialOnboarding, configuration, context,
+            exposeOnboardingUrl: environment.IsDevelopment(), cancellationToken);
     }
 
     private static async Task<Results<Created<CommercialOnboardingResponse>, ProblemHttpResult>> CreateCoreAsync(
         CommercialOnboardingHttpRequest? request,
         CreateCommercialOnboarding createCommercialOnboarding,
-        IHostEnvironment environment,
         IConfiguration configuration,
         HttpContext context,
+        bool exposeOnboardingUrl,
         CancellationToken cancellationToken)
     {
+        context.Response.Headers.CacheControl = "no-store";
         if (request is null)
         {
             return AuthenticationProblems.Create(context, StatusCodes.Status400BadRequest,
@@ -96,11 +107,7 @@ public static class CommercialOnboardingEndpoints
         if (result.Status == CommercialOnboardingStatus.Created && result.TenantId is { } tenantId)
         {
             string? onboardingUrl = null;
-            if (environment.IsDevelopment() && result.DevelopmentToken is not null &&
-                Uri.TryCreate(configuration["Email:Links:CommercialOnboardingUrl"], UriKind.Absolute, out var baseUri))
-            {
-                onboardingUrl = $"{baseUri}?token={Uri.EscapeDataString(result.DevelopmentToken)}";
-            }
+            if (exposeOnboardingUrl) onboardingUrl = BuildOnboardingUrl(configuration, result.DevelopmentToken);
             return TypedResults.Created((string?)null,
                 new CommercialOnboardingResponse(tenantId, "PendingOnboarding", onboardingUrl));
         }
@@ -155,12 +162,41 @@ public static class CommercialOnboardingEndpoints
         };
     }
 
-    private static Task<Results<Accepted, ProblemHttpResult>> ResendProtectedAsync(
-        Guid tenantId, [FromServices] ResendCommercialOnboardingInvitation resendInvitation,
-        HttpContext context, CancellationToken cancellationToken) =>
-        ResendCoreAsync(tenantId, resendInvitation, context, cancellationToken);
+    private static async Task<Results<NoContent, ProblemHttpResult>> DeletePreRegistrationAsync(
+        Guid tenantId,
+        [FromServices] ManageTenantPreRegistration manager,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        var status = await manager.DeleteAsync(tenantId, cancellationToken);
+        return status switch
+        {
+            TenantPreRegistrationStatus.Completed => TypedResults.NoContent(),
+            TenantPreRegistrationStatus.NotFound => AuthenticationProblems.Create(context, StatusCodes.Status404NotFound,
+                "Pré-cadastro não encontrado.", "not-found"),
+            _ => AuthenticationProblems.Create(context, StatusCodes.Status409Conflict,
+                "Somente pré-cadastros que nunca foram ativados podem ser excluídos permanentemente.", "invalid-state"),
+        };
+    }
 
-    private static async Task<Results<Accepted, ProblemHttpResult>> ResendAsync(
+    private static async Task<Results<Accepted<CommercialOnboardingResendResponse>, ProblemHttpResult>> ResendProtectedAsync(
+        Guid tenantId, [FromServices] ResendCommercialOnboardingInvitation resendInvitation,
+        [FromServices] IConfiguration configuration, HttpContext context, CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var result = await resendInvitation.ExecuteAsync(tenantId, cancellationToken);
+        return result.Status switch
+        {
+            CommercialOnboardingResendStatus.Accepted => TypedResults.Accepted((string?)null,
+                new CommercialOnboardingResendResponse(BuildOnboardingUrl(configuration, result.Token))),
+            CommercialOnboardingResendStatus.NotFound => AuthenticationProblems.Create(context, StatusCodes.Status404NotFound,
+                "Onboarding pendente não encontrado.", "not-found"),
+            _ => AuthenticationProblems.Create(context, StatusCodes.Status503ServiceUnavailable,
+                "Não foi possível reenviar o convite. Tente novamente.", "service-unavailable"),
+        };
+    }
+
+    private static async Task<Results<Accepted, ProblemHttpResult>> ResendSimulatedAsync(
         Guid tenantId,
         [FromServices] ResendCommercialOnboardingInvitation resendInvitation,
         [FromServices] IHostEnvironment environment,
@@ -175,15 +211,8 @@ public static class CommercialOnboardingEndpoints
                 "Recurso não encontrado.", "not-found");
         }
 
-        return await ResendCoreAsync(tenantId, resendInvitation, context, cancellationToken);
-    }
-
-    private static async Task<Results<Accepted, ProblemHttpResult>> ResendCoreAsync(
-        Guid tenantId, ResendCommercialOnboardingInvitation resendInvitation,
-        HttpContext context, CancellationToken cancellationToken)
-    {
-        var status = await resendInvitation.ExecuteAsync(tenantId, cancellationToken);
-        return status switch
+        var result = await resendInvitation.ExecuteAsync(tenantId, cancellationToken);
+        return result.Status switch
         {
             CommercialOnboardingResendStatus.Accepted => TypedResults.Accepted((string?)null),
             CommercialOnboardingResendStatus.NotFound => AuthenticationProblems.Create(context, StatusCodes.Status404NotFound,
@@ -191,6 +220,14 @@ public static class CommercialOnboardingEndpoints
             _ => AuthenticationProblems.Create(context, StatusCodes.Status503ServiceUnavailable,
                 "Não foi possível reenviar o convite. Tente novamente.", "service-unavailable"),
         };
+    }
+
+    private static string? BuildOnboardingUrl(IConfiguration configuration, string? token)
+    {
+        var baseUrl = configuration["Email:Links:CommercialOnboardingUrl"];
+        return token is not null && Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+            ? QueryHelpers.AddQueryString(uri.ToString(), "token", token)
+            : null;
     }
 }
 
@@ -204,4 +241,12 @@ public sealed record CommercialOnboardingHttpRequest(
     public override string ToString() => "[REDACTED]";
 }
 
-public sealed record CommercialOnboardingResponse(Guid TenantId, string Status, string? DevelopmentOnboardingUrl = null);
+public sealed record CommercialOnboardingResponse(Guid TenantId, string Status, string? OnboardingUrl = null)
+{
+    public override string ToString() => "[REDACTED]";
+}
+
+public sealed record CommercialOnboardingResendResponse(string? OnboardingUrl)
+{
+    public override string ToString() => "[REDACTED]";
+}
