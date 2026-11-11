@@ -70,6 +70,23 @@ public sealed class CommercialOnboardingTests
     }
 
     [Fact]
+    public async Task CreatesPreRegistrationAndTokenWhenEmailDeliveryIsNotConfigured()
+    {
+        var scenario = new IdentityScenario();
+        var useCase = new CreateCommercialOnboarding(
+            scenario.Store, scenario.Tokens, invitationSender: null, scenario.Clock);
+
+        var result = await useCase.ExecuteAsync(Command(), CancellationToken.None);
+
+        Assert.Equal(CommercialOnboardingStatus.Created, result.Status);
+        Assert.NotNull(result.DevelopmentToken);
+        Assert.Single(scenario.Store.Tenants);
+        Assert.Single(scenario.Store.Tokens);
+        Assert.Empty(scenario.Invitations);
+        Assert.Equal(1, scenario.Store.Commits);
+    }
+
+    [Fact]
     public async Task ResendRevokesThePreviousTokenAndSendsANewInvitation()
     {
         var scenario = new IdentityScenario();
@@ -85,6 +102,24 @@ public sealed class CommercialOnboardingTests
         var activeToken = Assert.Single(scenario.Store.Tokens,
             token => token.Purpose == AccountActionTokenPurpose.CommercialOnboarding && token.RevokedAt is null);
         Assert.True(scenario.Tokens.Matches(result.Token!, activeToken.SecretHash));
+    }
+
+    [Fact]
+    public async Task RegeneratesOnboardingLinkWhenEmailDeliveryIsNotConfigured()
+    {
+        var scenario = new IdentityScenario();
+        var created = await Create(scenario).ExecuteAsync(Command(), CancellationToken.None);
+        var previousToken = Assert.Single(scenario.Store.Tokens);
+        var useCase = new ResendCommercialOnboardingInvitation(
+            scenario.Store, scenario.Tokens, invitationSender: null, scenario.Clock);
+
+        var result = await useCase.ExecuteAsync(created.TenantId!.Value, CancellationToken.None);
+
+        Assert.Equal(CommercialOnboardingResendStatus.Accepted, result.Status);
+        Assert.NotNull(result.Token);
+        Assert.NotNull(previousToken.RevokedAt);
+        Assert.Single(scenario.Invitations);
+        Assert.Equal(2, scenario.Store.Commits);
     }
 
     private static CreateCommercialOnboarding Create(IdentityScenario scenario) =>
