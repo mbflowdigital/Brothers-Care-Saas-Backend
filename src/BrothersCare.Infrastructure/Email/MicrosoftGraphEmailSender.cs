@@ -1,12 +1,18 @@
 using System.Net;
-using System.Net.Mail;
+using Azure.Identity;
 using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Application.Tenancy.Contracts;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Graph;
+using Microsoft.Graph.Models;
+using Microsoft.Graph.Users.Item.SendMail;
+using Microsoft.Kiota.Abstractions;
 
 namespace BrothersCare.Infrastructure.Email;
 
-public sealed class SmtpEmailSender(SmtpEmailSettings settings) :
+public sealed class MicrosoftGraphEmailSender(
+    GraphServiceClient graphClient,
+    MicrosoftGraphEmailSettings settings) :
     IInvitationSender,
     ICommercialOnboardingSender,
     IPasswordRecoverySender
@@ -51,31 +57,57 @@ public sealed class SmtpEmailSender(SmtpEmailSettings settings) :
             await SendAsync(delivery.Email, "Redefinição de senha do Brothers Care", body, cancellationToken);
             return true;
         }
-        catch (SmtpException)
+        catch (ApiException)
+        {
+            return false;
+        }
+        catch (AuthenticationFailedException)
         {
             return false;
         }
     }
 
-    private async Task SendAsync(string recipient, string subject, string htmlBody, CancellationToken cancellationToken)
+    private async Task SendAsync(
+        string recipient,
+        string subject,
+        string htmlBody,
+        CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        using var message = new MailMessage
+        var request = new SendMailPostRequestBody
         {
-            From = new MailAddress(settings.FromAddress, settings.FromName),
-            Subject = subject,
-            Body = htmlBody,
-            IsBodyHtml = true,
+            Message = new Message
+            {
+                Subject = subject,
+                Body = new ItemBody
+                {
+                    ContentType = BodyType.Html,
+                    Content = htmlBody,
+                },
+                From = new Recipient
+                {
+                    EmailAddress = new EmailAddress
+                    {
+                        Address = settings.FromAddress,
+                        Name = settings.FromName,
+                    },
+                },
+                ToRecipients =
+                [
+                    new Recipient
+                    {
+                        EmailAddress = new EmailAddress
+                        {
+                            Address = recipient,
+                        },
+                    },
+                ],
+            },
+            SaveToSentItems = true,
         };
-        message.To.Add(new MailAddress(recipient));
 
-        using var client = new SmtpClient(settings.Host, settings.Port)
-        {
-            EnableSsl = true,
-            UseDefaultCredentials = false,
-            Credentials = new NetworkCredential(settings.UserName, settings.Password),
-        };
-        await client.SendMailAsync(message, cancellationToken);
+        await graphClient.Users[settings.FromAddress].SendMail.PostAsync(
+            request,
+            cancellationToken: cancellationToken);
     }
 
     private static string AddToken(Uri url, string token) =>

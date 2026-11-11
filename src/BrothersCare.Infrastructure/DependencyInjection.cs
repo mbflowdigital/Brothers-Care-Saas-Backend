@@ -1,3 +1,4 @@
+using Azure.Identity;
 using BrothersCare.Application.Identity;
 using BrothersCare.Application.Identity.Activation;
 using BrothersCare.Application.Identity.Contracts;
@@ -18,6 +19,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Graph;
 
 namespace BrothersCare.Infrastructure;
 
@@ -133,28 +135,26 @@ public static class DependencyInjection
 
     private static void ConfigureEmail(IServiceCollection services, IConfiguration configuration)
     {
-        var section = configuration.GetSection("Email:Smtp");
+        var section = configuration.GetSection("Email:MicrosoftGraph");
         if (!section.GetValue("Enabled", false))
         {
             return;
         }
 
-        var host = section["Host"];
-        var userName = section["UserName"];
-        var password = section["Password"];
+        var tenantId = section["TenantId"];
+        var clientId = section["ClientId"];
+        var clientSecret = section["ClientSecret"];
         var fromAddress = section["FromAddress"];
         var fromName = section["FromName"];
-        var port = section.GetValue<int?>("Port") ?? 587;
         var activationUrl = configuration["Email:Links:ActivationUrl"];
         var commercialOnboardingUrl = configuration["Email:Links:CommercialOnboardingUrl"];
         var passwordRecoveryUrl = configuration["Email:Links:PasswordRecoveryUrl"];
         var errors = new List<string>();
-        if (string.IsNullOrWhiteSpace(host)) errors.Add("Email:Smtp:Host");
-        if (string.IsNullOrWhiteSpace(userName)) errors.Add("Email:Smtp:UserName");
-        if (string.IsNullOrWhiteSpace(password)) errors.Add("Email:Smtp:Password");
-        if (string.IsNullOrWhiteSpace(fromAddress)) errors.Add("Email:Smtp:FromAddress");
-        if (string.IsNullOrWhiteSpace(fromName)) errors.Add("Email:Smtp:FromName");
-        if (port is < 1 or > 65535) errors.Add("Email:Smtp:Port");
+        if (string.IsNullOrWhiteSpace(tenantId)) errors.Add("Email:MicrosoftGraph:TenantId");
+        if (string.IsNullOrWhiteSpace(clientId)) errors.Add("Email:MicrosoftGraph:ClientId");
+        if (string.IsNullOrWhiteSpace(clientSecret)) errors.Add("Email:MicrosoftGraph:ClientSecret");
+        if (string.IsNullOrWhiteSpace(fromAddress)) errors.Add("Email:MicrosoftGraph:FromAddress");
+        if (string.IsNullOrWhiteSpace(fromName)) errors.Add("Email:MicrosoftGraph:FromName");
         if (!Uri.TryCreate(activationUrl, UriKind.Absolute, out var activationUri) ||
             activationUri.Scheme is not ("https" or "http")) errors.Add("Email:Links:ActivationUrl");
         if (!Uri.TryCreate(commercialOnboardingUrl, UriKind.Absolute, out var commercialOnboardingUri) ||
@@ -164,14 +164,17 @@ public static class DependencyInjection
 
         if (errors.Count > 0)
         {
-            throw new InvalidOperationException($"Email SMTP is enabled but these settings are invalid or missing: {string.Join(", ", errors)}.");
+            throw new InvalidOperationException($"Microsoft Graph email is enabled but these settings are invalid or missing: {string.Join(", ", errors)}.");
         }
 
-        services.AddSingleton(new SmtpEmailSettings(
-            host!, port, userName!, password!, fromAddress!, fromName!, activationUri!, commercialOnboardingUri!, recoveryUri!));
-        services.AddScoped<SmtpEmailSender>();
-        services.AddScoped<IInvitationSender>(provider => provider.GetRequiredService<SmtpEmailSender>());
-        services.AddScoped<ICommercialOnboardingSender>(provider => provider.GetRequiredService<SmtpEmailSender>());
-        services.AddScoped<IPasswordRecoverySender>(provider => provider.GetRequiredService<SmtpEmailSender>());
+        var settings = new MicrosoftGraphEmailSettings(
+            tenantId!, clientId!, clientSecret!, fromAddress!, fromName!, activationUri!, commercialOnboardingUri!, recoveryUri!);
+        var credential = new ClientSecretCredential(settings.TenantId, settings.ClientId, settings.ClientSecret);
+        services.AddSingleton(settings);
+        services.AddSingleton(new GraphServiceClient(credential, ["https://graph.microsoft.com/.default"]));
+        services.AddScoped<MicrosoftGraphEmailSender>();
+        services.AddScoped<IInvitationSender>(provider => provider.GetRequiredService<MicrosoftGraphEmailSender>());
+        services.AddScoped<ICommercialOnboardingSender>(provider => provider.GetRequiredService<MicrosoftGraphEmailSender>());
+        services.AddScoped<IPasswordRecoverySender>(provider => provider.GetRequiredService<MicrosoftGraphEmailSender>());
     }
 }

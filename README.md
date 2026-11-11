@@ -99,22 +99,25 @@ As decisões aprovadas para empresas, unidades, identificação por CPF/CNPJ, co
 
 ## E-mail transacional
 
-Convites e recuperação de senha só são enviados quando `Email:Smtp:Enabled` estiver habilitado e toda a configuração SMTP estiver presente. Configure os segredos pelo ambiente ou user secrets; nunca os versione.
+Convites, onboarding comercial e recuperação de senha só são enviados quando
+`Email:MicrosoftGraph:Enabled` estiver habilitado e toda a configuração do Microsoft Graph estiver presente.
+O registro de aplicativo precisa da permissão de aplicação `Mail.Send`, com consentimento administrativo. Configure
+o segredo exclusivamente por ambiente, user secrets ou cofre; nunca o versione.
 
 ```powershell
-$env:Email__Smtp__Enabled = "true"
-$env:Email__Smtp__Host = "mail5015.site4now.net"
-$env:Email__Smtp__Port = "587"
-$env:Email__Smtp__UserName = "noreply@brothersdigital.tec.br"
-$env:Email__Smtp__Password = "senha-da-caixa"
-$env:Email__Smtp__FromAddress = "noreply@brothersdigital.tec.br"
-$env:Email__Smtp__FromName = "Brothers Care"
-$env:Email__Links__ActivationUrl = "https://app.seu-dominio.com/ativar-conta"
-$env:Email__Links__CommercialOnboardingUrl = "https://app.seu-dominio.com/onboarding"
-$env:Email__Links__PasswordRecoveryUrl = "https://app.seu-dominio.com/recuperar-senha"
+dotnet user-secrets set "Email:MicrosoftGraph:Enabled" "true" --project src/BrothersCare.Api
+dotnet user-secrets set "Email:MicrosoftGraph:TenantId" "id-do-locatario" --project src/BrothersCare.Api
+dotnet user-secrets set "Email:MicrosoftGraph:ClientId" "id-do-aplicativo" --project src/BrothersCare.Api
+dotnet user-secrets set "Email:MicrosoftGraph:ClientSecret" "valor-do-segredo" --project src/BrothersCare.Api
+dotnet user-secrets set "Email:MicrosoftGraph:FromAddress" "noreply@brothersdigital.tec.br" --project src/BrothersCare.Api
+dotnet user-secrets set "Email:MicrosoftGraph:FromName" "Brothers Care" --project src/BrothersCare.Api
 ```
 
-O adaptador usa SMTP com TLS. Para o serviço MyASP, use a porta 587 e o host seguro informado no painel. As URLs devem apontar para telas do frontend que recebem o parâmetro `token` e chamam os endpoints de ativação ou recuperação.
+O adaptador usa autenticação app-only e envia por
+`POST /users/{FromAddress}/sendMail`. As URLs em `Email:Links` devem apontar para telas do frontend que recebem o
+parâmetro `token` e chamam os endpoints de ativação, onboarding ou recuperação. Em produção, substitua o
+segredo do cliente por certificado ou identidade de carga de trabalho e restrinja a aplicação somente à caixa
+remetente no Exchange Online.
 
 ## Dependências adicionais
 
