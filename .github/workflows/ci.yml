@@ -66,6 +66,22 @@ jobs:
           name: brothers-care-api
           path: publish
 
+      - name: Prepare maintenance page
+        shell: bash
+        run: printf '%s\n' '<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Brothers Care</title><body>API em atualização. Tente novamente em instantes.</body></html>' > publish/app_offline.htm
+
+      - name: Stop API before deployment
+        shell: bash
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: >-
+          curl --fail --show-error --silent --ftp-pasv
+          --user "$FTP_USERNAME:$FTP_PASSWORD"
+          --upload-file publish/app_offline.htm
+          "ftp://$FTP_SERVER/app_offline.htm"
+
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
@@ -76,3 +92,17 @@ jobs:
           port: 21
           local-dir: ./publish/
           server-dir: /
+
+      - name: Start API after deployment
+        if: always()
+        continue-on-error: true
+        shell: bash
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: >-
+          curl --fail --show-error --silent --ftp-pasv
+          --user "$FTP_USERNAME:$FTP_PASSWORD"
+          --quote "DELE app_offline.htm"
+          "ftp://$FTP_SERVER/"
