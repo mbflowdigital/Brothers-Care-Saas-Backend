@@ -50,6 +50,32 @@ dotnet tool restore
 dotnet ef database update --project src/BrothersCare.Infrastructure --startup-project src/BrothersCare.Api
 ```
 
+## Primeiro superadministrador
+
+Depois de aplicar a migração que inclui `platform_administrators`, o primeiro superadministrador pode ser provisionado sem gravar dados pessoais ou credenciais no repositório. Configure somente no ambiente seguro onde o comando será executado:
+
+```powershell
+$env:Bootstrap__SuperAdministrator__Email = "admin@empresa.exemplo"
+$env:Bootstrap__SuperAdministrator__DisplayName = "Administrador da plataforma"
+$env:Bootstrap__SuperAdministrator__Confirmation = "create-super-administrator"
+dotnet run --project src/BrothersCare.Api -- --bootstrap-super-administrator
+```
+
+O comando é idempotente para o mesmo usuário ativo. Ele cria a identidade global e o vínculo `platform_administrators`; não cria senha, token ou sessão. Esses elementos pertencem à futura implementação de autenticação.
+
+## Ativação do superadministrador
+
+Após o bootstrap e a migration de autenticação, emita um token temporário em um terminal confiável. O token é mostrado uma única vez no console, não é registrado pela aplicação e expira em 30 minutos por padrão. Não o inclua em e-mails, logs, tickets ou repositório.
+
+```powershell
+$env:Bootstrap__AccountActivation__Email = "admin@empresa.exemplo"
+$env:Bootstrap__AccountActivation__Confirmation = "issue-account-activation-token"
+$env:Bootstrap__AccountActivation__LifetimeMinutes = "30"
+dotnet run --project src/BrothersCare.Api -- --issue-super-administrator-activation-token
+```
+
+O token é aceito pelo caso de uso de ativação; o endpoint HTTP será disponibilizado na etapa seguinte. Emitir outro token revoga imediatamente os anteriores ainda ativos para o mesmo superadministrador.
+
 ## Projetos
 
 - `src/BrothersCare.Domain`: modelo e regras do domínio, sem infraestrutura.
@@ -60,6 +86,38 @@ dotnet ef database update --project src/BrothersCare.Infrastructure --startup-pr
 - `tests/BrothersCare.Api.IntegrationTests`: verifica a fundação HTTP pelo processo real de teste.
 
 As versões NuGet ficam em `Directory.Packages.props`; regras comuns de compilação ficam em `Directory.Build.props`.
+
+## Regras de negócio
+
+A proposta de regras e transições de estado para pacientes, profissionais, agenda, evoluções, financeiro e assinaturas está em [docs/mvp-business-rules.md](docs/mvp-business-rules.md). O documento distingue regras propostas de comportamentos ainda não aprovados.
+
+As convenções propostas para OpenAPI, contratos HTTP, paginação, filtros, datas, valores monetários e erros estão em [docs/http-api-contracts.md](docs/http-api-contracts.md).
+
+A especificação completa para login, sessão, expiração, logout, ativação e recuperação de acesso está em [docs/authentication-implementation.md](docs/authentication-implementation.md).
+
+As decisões aprovadas para empresas, unidades, identificação por CPF/CNPJ, convites, seleção de empresa e acesso a dados clínicos estão em [docs/tenant-unit-access-rules.md](docs/tenant-unit-access-rules.md). Consulte este documento antes de implementar ou alterar qualquer fluxo desses contextos.
+
+## E-mail transacional
+
+Convites, onboarding comercial e recuperação de senha só são enviados quando
+`Email:MicrosoftGraph:Enabled` estiver habilitado e toda a configuração do Microsoft Graph estiver presente.
+O registro de aplicativo precisa da permissão de aplicação `Mail.Send`, com consentimento administrativo. Configure
+o segredo exclusivamente por ambiente, user secrets ou cofre; nunca o versione.
+
+```powershell
+dotnet user-secrets set "Email:MicrosoftGraph:Enabled" "true" --project src/BrothersCare.Api
+dotnet user-secrets set "Email:MicrosoftGraph:TenantId" "id-do-locatario" --project src/BrothersCare.Api
+dotnet user-secrets set "Email:MicrosoftGraph:ClientId" "id-do-aplicativo" --project src/BrothersCare.Api
+dotnet user-secrets set "Email:MicrosoftGraph:ClientSecret" "valor-do-segredo" --project src/BrothersCare.Api
+dotnet user-secrets set "Email:MicrosoftGraph:FromAddress" "noreply@brothersdigital.tec.br" --project src/BrothersCare.Api
+dotnet user-secrets set "Email:MicrosoftGraph:FromName" "Brothers Care" --project src/BrothersCare.Api
+```
+
+O adaptador usa autenticação app-only e envia por
+`POST /users/{FromAddress}/sendMail`. As URLs em `Email:Links` devem apontar para telas do frontend que recebem o
+parâmetro `token` e chamam os endpoints de ativação, onboarding ou recuperação. Em produção, substitua o
+segredo do cliente por certificado ou identidade de carga de trabalho e restrinja a aplicação somente à caixa
+remetente no Exchange Online.
 
 ## Dependências adicionais
 

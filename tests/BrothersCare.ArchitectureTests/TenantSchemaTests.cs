@@ -1,4 +1,5 @@
 using BrothersCare.Domain.Care;
+using BrothersCare.Domain.Identity;
 using BrothersCare.Domain.Tenancy;
 using BrothersCare.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -51,6 +52,48 @@ public sealed class TenantSchemaTests
         AssertTenantScopedForeignKey<ClinicalRecord, Appointment>(context);
         AssertTenantScopedForeignKey<ClinicalRecord, Patient>(context);
         AssertTenantScopedForeignKey<ClinicalRecord, TenantMembership>(context);
+    }
+
+    [Fact]
+    public void PlatformAdministratorIsGlobalAndHasOneUser()
+    {
+        using var context = CreateContext();
+
+        var administrator = context.Model.FindEntityType(typeof(PlatformAdministrator));
+        Assert.NotNull(administrator);
+        Assert.Null(administrator.FindProperty("TenantId"));
+        Assert.Contains(
+            administrator.GetIndexes(),
+            index => index.IsUnique && index.Properties.Select(property => property.Name).SequenceEqual(["UserId"]));
+        Assert.Contains(
+            administrator.GetForeignKeys(),
+            foreignKey => foreignKey.PrincipalEntityType.ClrType == typeof(User) &&
+                          foreignKey.Properties.Select(property => property.Name).SequenceEqual(["UserId"]));
+    }
+
+    [Fact]
+    public void UserCredentialHasGlobalOneToOneRelationshipWithUser()
+    {
+        using var context = CreateContext();
+        var credential = context.Model.FindEntityType(typeof(UserCredential));
+        Assert.NotNull(credential);
+        Assert.Null(credential.FindProperty("TenantId"));
+        var relationship = Assert.Single(credential.GetForeignKeys(), key => key.PrincipalEntityType.ClrType == typeof(User));
+        Assert.True(relationship.IsUnique);
+        Assert.True(relationship.IsRequired);
+        Assert.Equal(["UserId"], relationship.Properties.Select(property => property.Name));
+    }
+
+    [Fact]
+    public void ClinicUnitAllowsOnlyOneDefaultPerTenant()
+    {
+        using var context = CreateContext();
+        var unit = context.Model.FindEntityType(typeof(ClinicUnit));
+        Assert.NotNull(unit);
+
+        Assert.Contains(unit.GetIndexes(), index =>
+            index.IsUnique && index.GetFilter() == "[IsDefault] = 1" &&
+            index.Properties.Select(property => property.Name).SequenceEqual(["TenantId"]));
     }
 
     private static BrothersCareDbContext CreateContext()

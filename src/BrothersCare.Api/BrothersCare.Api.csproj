@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <PropertyGroup>
+    <UserSecretsId>dd2793d9-bfd8-4479-b827-92c9e0b79a26</UserSecretsId>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
     <!-- Direct pin avoids vulnerable transitive Microsoft.OpenApi versions. -->
@@ -10,6 +14,10 @@
   <ItemGroup>
     <ProjectReference Include="..\BrothersCare.Application\BrothersCare.Application.csproj" />
     <ProjectReference Include="..\BrothersCare.Infrastructure\BrothersCare.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
 </Project>

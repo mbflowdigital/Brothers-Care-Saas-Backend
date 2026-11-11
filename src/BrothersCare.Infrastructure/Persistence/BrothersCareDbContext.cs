@@ -19,17 +19,25 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
 
     public DbSet<PatientCareAssignment> PatientCareAssignments => Set<PatientCareAssignment>();
 
+    public DbSet<PlatformAdministrator> PlatformAdministrators => Set<PlatformAdministrator>();
+
     public DbSet<Professional> Professionals => Set<Professional>();
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
     public DbSet<TenantMembership> TenantMemberships => Set<TenantMembership>();
 
+    public DbSet<UserCredential> UserCredentials => Set<UserCredential>();
+    public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<AccountActionToken> AccountActionTokens => Set<AccountActionToken>();
+
     public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(BrothersCareDbContext).Assembly);
         ConfigureUser(modelBuilder);
+        ConfigurePlatformAdministrator(modelBuilder);
         ConfigureTenant(modelBuilder);
         ConfigureClinicUnit(modelBuilder);
         ConfigureTenantMembership(modelBuilder);
@@ -49,19 +57,43 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.Property(item => item.Id).ValueGeneratedNever();
         entity.Property(item => item.Email).HasMaxLength(320).IsRequired();
         entity.Property(item => item.NormalizedEmail).HasMaxLength(320).IsRequired();
+        entity.Property(item => item.Cpf).HasMaxLength(11);
         entity.Property(item => item.DisplayName).HasMaxLength(200).IsRequired();
         entity.HasIndex(item => item.NormalizedEmail).IsUnique();
+        entity.HasIndex(item => item.Cpf).IsUnique().HasFilter("[Cpf] IS NOT NULL");
     }
 
     private static void ConfigureTenant(ModelBuilder modelBuilder)
     {
         var entity = modelBuilder.Entity<Tenant>();
-        entity.ToTable("tenants");
+        entity.ToTable("tenants", table =>
+            table.HasCheckConstraint("CK_tenants_status", "[Status] IN (1, 2, 3, 4)"));
         entity.HasKey(item => item.Id);
         entity.Property(item => item.Id).ValueGeneratedNever();
         entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
+        entity.Property(item => item.Cnpj).HasMaxLength(14);
+        entity.Property(item => item.LegalName).HasMaxLength(200);
+        entity.Property(item => item.CommercialEmail).HasMaxLength(320);
+        entity.Property(item => item.Phone).HasMaxLength(11);
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
         entity.HasIndex(item => item.Status);
+        entity.HasIndex(item => item.Cnpj).IsUnique().HasFilter("[Cnpj] IS NOT NULL");
+    }
+
+    private static void ConfigurePlatformAdministrator(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<PlatformAdministrator>();
+        entity.ToTable("platform_administrators");
+        entity.HasKey(item => item.Id);
+        entity.Property(item => item.Id).ValueGeneratedNever();
+        entity.Property(item => item.Role).HasConversion<int>().IsRequired();
+        entity.Property(item => item.Status).HasConversion<int>().IsRequired();
+        entity.HasIndex(item => item.UserId).IsUnique();
+        entity.HasIndex(item => new { item.Status, item.Role });
+        entity.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(item => item.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 
     private static void ConfigureClinicUnit(ModelBuilder modelBuilder)
@@ -70,7 +102,18 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.ToTable("clinic_units");
         ConfigureTenantScopedKey(entity);
         entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
+        entity.Property(item => item.PostalCode).HasMaxLength(8);
+        entity.Property(item => item.Street).HasMaxLength(200);
+        entity.Property(item => item.Number).HasMaxLength(20);
+        entity.Property(item => item.Complement).HasMaxLength(100);
+        entity.Property(item => item.District).HasMaxLength(100);
+        entity.Property(item => item.City).HasMaxLength(100);
+        entity.Property(item => item.State).HasMaxLength(2);
+        entity.Property(item => item.Phone).HasMaxLength(11);
         entity.HasIndex(item => new { item.TenantId, item.Name }).IsUnique();
+        entity.HasIndex(item => item.TenantId, "UX_clinic_units_default_per_tenant")
+            .IsUnique()
+            .HasFilter("[IsDefault] = 1");
         entity.HasOne<Tenant>()
             .WithMany()
             .HasForeignKey(item => item.TenantId)
@@ -81,6 +124,7 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
     {
         var entity = modelBuilder.Entity<TenantMembership>();
         entity.ToTable("tenant_memberships");
+        entity.HasAlternateKey(item => new { item.Id, item.UserId });
         ConfigureTenantScopedKey(entity);
         entity.Property(item => item.Role).HasConversion<int>().IsRequired();
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
@@ -136,13 +180,21 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         ConfigureTenantScopedKey(entity);
         entity.Property(item => item.FullName).HasMaxLength(200).IsRequired();
         entity.Property(item => item.Specialty).HasMaxLength(150).IsRequired();
+        entity.Property(item => item.CouncilType).HasMaxLength(30);
         entity.Property(item => item.RegistrationNumber).HasMaxLength(100).IsRequired();
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
         entity.HasIndex(item => new { item.TenantId, item.RegistrationNumber }).IsUnique();
+        entity.HasIndex(item => new { item.TenantId, item.TenantMembershipId }).IsUnique()
+            .HasFilter("[TenantMembershipId] IS NOT NULL");
         entity.HasIndex(item => new { item.TenantId, item.Status, item.FullName });
         entity.HasOne<Tenant>()
             .WithMany()
             .HasForeignKey(item => item.TenantId)
+            .OnDelete(DeleteBehavior.Restrict);
+        entity.HasOne<TenantMembership>()
+            .WithMany()
+            .HasForeignKey(item => new { item.TenantId, item.TenantMembershipId })
+            .HasPrincipalKey(item => new { item.TenantId, item.Id })
             .OnDelete(DeleteBehavior.Restrict);
     }
 

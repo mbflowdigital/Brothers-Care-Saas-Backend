@@ -7,7 +7,6 @@ using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
-#pragma warning disable IDE0161, CA1861
 
 namespace BrothersCare.Infrastructure.Persistence.Migrations
 {
@@ -191,6 +190,10 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("CouncilType")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -215,6 +218,9 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("TenantMembershipId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId");
@@ -222,15 +228,108 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "RegistrationNumber")
                         .IsUnique();
 
+                    b.HasIndex("TenantId", "TenantMembershipId")
+                        .IsUnique()
+                        .HasFilter("[TenantMembershipId] IS NOT NULL");
+
                     b.HasIndex("TenantId", "Status", "FullName");
 
                     b.ToTable("professionals", (string)null);
+                });
+
+            modelBuilder.Entity("BrothersCare.Domain.Identity.AccountActionToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("consumed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("expires_at");
+
+                    b.Property<int>("Purpose")
+                        .HasColumnType("int")
+                        .HasColumnName("purpose");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<byte[]>("SecretHash")
+                        .IsRequired()
+                        .HasColumnType("binary(32)")
+                        .HasColumnName("secret_hash");
+
+                    b.Property<Guid?>("TenantMembershipId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("tenant_membership_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SecretHash")
+                        .IsUnique();
+
+                    b.HasIndex("TenantMembershipId", "Purpose");
+
+                    b.HasIndex("TenantMembershipId", "UserId");
+
+                    b.HasIndex("UserId", "Purpose");
+
+                    b.ToTable("account_action_tokens", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_account_action_tokens_expiry", "expires_at > created_at");
+
+                            t.HasCheckConstraint("ck_account_action_tokens_membership", "(purpose IN (3, 4) AND tenant_membership_id IS NOT NULL) OR (purpose IN (1, 2) AND tenant_membership_id IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("BrothersCare.Domain.Identity.PlatformAdministrator", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "Role");
+
+                    b.ToTable("platform_administrators", (string)null);
                 });
 
             modelBuilder.Entity("BrothersCare.Domain.Identity.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Cpf")
+                        .HasMaxLength(11)
+                        .HasColumnType("nvarchar(11)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
@@ -252,10 +351,127 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Cpf")
+                        .IsUnique()
+                        .HasFilter("[Cpf] IS NOT NULL");
+
                     b.HasIndex("NormalizedEmail")
                         .IsUnique();
 
                     b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("BrothersCare.Domain.Identity.UserCredential", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("FailedSignInCount")
+                        .HasColumnType("int")
+                        .HasColumnName("failed_sign_in_count");
+
+                    b.Property<DateTimeOffset?>("LockoutEndsAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("lockout_ends_at");
+
+                    b.Property<DateTimeOffset?>("PasswordChangedAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("password_changed_at");
+
+                    b.Property<string>("PasswordHash")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("password_hash");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "LockoutEndsAt");
+
+                    b.ToTable("user_credentials", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_user_credentials_count", "failed_sign_in_count >= 0");
+
+                            t.HasCheckConstraint("ck_user_credentials_locked", "status <> 3 OR lockout_ends_at IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_user_credentials_password", "status NOT IN (2, 3) OR (password_hash IS NOT NULL AND password_changed_at IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("BrothersCare.Domain.Identity.UserSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AbsoluteExpiresAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("absolute_expires_at");
+
+                    b.Property<Guid?>("ActiveTenantId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("active_tenant_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("IdleExpiresAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("idle_expires_at");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<int?>("RevocationReason")
+                        .HasColumnType("int")
+                        .HasColumnName("revocation_reason");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<byte[]>("SecretHash")
+                        .IsRequired()
+                        .HasColumnType("binary(32)")
+                        .HasColumnName("secret_hash");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActiveTenantId");
+
+                    b.HasIndex("SecretHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "RevokedAt", "AbsoluteExpiresAt");
+
+                    b.ToTable("user_sessions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_user_sessions_expiry", "idle_expires_at > created_at AND idle_expires_at <= absolute_expires_at");
+                        });
                 });
 
             modelBuilder.Entity("BrothersCare.Domain.Tenancy.ClinicUnit", b =>
@@ -263,14 +479,49 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("City")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Complement")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("District")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Number")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(11)
+                        .HasColumnType("nvarchar(11)");
+
+                    b.Property<string>("PostalCode")
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(2)
+                        .HasColumnType("nvarchar(2)");
+
+                    b.Property<string>("Street")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
@@ -283,6 +534,10 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "Name")
                         .IsUnique();
+
+                    b.HasIndex(new[] { "TenantId" }, "UX_clinic_units_default_per_tenant")
+                        .IsUnique()
+                        .HasFilter("[IsDefault] = 1");
 
                     b.ToTable("clinic_units", (string)null);
                 });
@@ -323,22 +578,45 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Cnpj")
+                        .HasMaxLength(14)
+                        .HasColumnType("nvarchar(14)");
+
+                    b.Property<string>("CommercialEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("LegalName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("Phone")
+                        .HasMaxLength(11)
+                        .HasColumnType("nvarchar(11)");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Cnpj")
+                        .IsUnique()
+                        .HasFilter("[Cnpj] IS NOT NULL");
+
                     b.HasIndex("Status");
 
-                    b.ToTable("tenants", (string)null);
+                    b.ToTable("tenants", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_tenants_status", "[Status] IN (1, 2, 3, 4)");
+                        });
                 });
 
             modelBuilder.Entity("BrothersCare.Domain.Tenancy.TenantMembership", b =>
@@ -461,6 +739,59 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.HasOne("BrothersCare.Domain.Tenancy.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BrothersCare.Domain.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "TenantMembershipId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("BrothersCare.Domain.Identity.AccountActionToken", b =>
+                {
+                    b.HasOne("BrothersCare.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BrothersCare.Domain.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantMembershipId", "UserId")
+                        .HasPrincipalKey("Id", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("BrothersCare.Domain.Identity.PlatformAdministrator", b =>
+                {
+                    b.HasOne("BrothersCare.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BrothersCare.Domain.Identity.UserCredential", b =>
+                {
+                    b.HasOne("BrothersCare.Domain.Identity.User", null)
+                        .WithOne()
+                        .HasForeignKey("BrothersCare.Domain.Identity.UserCredential", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BrothersCare.Domain.Identity.UserSession", b =>
+                {
+                    b.HasOne("BrothersCare.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("ActiveTenantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("BrothersCare.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
