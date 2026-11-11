@@ -22,11 +22,6 @@ public sealed class CreateCommercialOnboarding(
             return new(CommercialOnboardingStatus.InvalidInput);
         }
 
-        if (invitationSender is null)
-        {
-            return new(CommercialOnboardingStatus.DeliveryUnavailable);
-        }
-
         await using var transaction = await store.BeginAsync(cancellationToken);
         if (await transaction.FindTenantByCnpjAsync(cnpj!, cancellationToken) is not null)
         {
@@ -60,8 +55,11 @@ public sealed class CreateCommercialOnboarding(
             generatedToken.SecretHash, now, expiresAt, membership.Id));
 
         await transaction.SaveAsync(cancellationToken);
-        await invitationSender.SendAsync(new InvitationDelivery(
-            email, command.ResponsibleName.Trim(), tenant.Name, generatedToken.Secret, expiresAt), cancellationToken);
+        if (invitationSender is not null)
+        {
+            await invitationSender.SendAsync(new InvitationDelivery(
+                email, command.ResponsibleName.Trim(), tenant.Name, generatedToken.Secret, expiresAt), cancellationToken);
+        }
         await transaction.CommitAsync(cancellationToken);
         return new(CommercialOnboardingStatus.Created, tenant.Id, generatedToken.Secret);
     }
