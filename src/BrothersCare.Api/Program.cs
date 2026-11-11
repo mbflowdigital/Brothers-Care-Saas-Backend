@@ -62,6 +62,7 @@ if (allowedOrigins.Length > 0)
 }
 
 var app = builder.Build();
+var openApiEnabled = app.Environment.IsDevelopment() || app.Configuration.GetValue("OpenApi:Enabled", false);
 
 var fixedAdministrator = app.Configuration.GetSection("DevelopmentSuperAdministrator");
 if (app.Environment.IsDevelopment() && fixedAdministrator.GetValue("Enabled", false))
@@ -143,7 +144,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-if (app.Environment.IsDevelopment())
+if (openApiEnabled)
 {
     app.UseSwagger();
     app.UseSwaggerUI();
@@ -157,6 +158,13 @@ if (allowedOrigins.Length > 0)
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<CsrfProtectionMiddleware>();
+
+if (openApiEnabled)
+{
+    app.MapGet("/", () => Results.Redirect("/swagger"))
+        .AllowAnonymous()
+        .ExcludeFromDescription();
+}
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
