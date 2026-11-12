@@ -12,6 +12,12 @@ public sealed record LoginHttpRequest(string? Cpf, string? Password)
 public sealed record SelectActiveTenantHttpRequest(Guid TenantId);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ChangePasswordHttpRequest(string? CurrentPassword, string? NewPassword, string? PasswordConfirmation)
+{
+    public override string ToString() => "[REDACTED]";
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PasswordRecoveryRequestHttpRequest(string? Email)
 {
     public override string ToString() => "[REDACTED]";
