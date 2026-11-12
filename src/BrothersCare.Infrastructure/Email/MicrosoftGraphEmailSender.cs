@@ -3,6 +3,7 @@ using Azure.Identity;
 using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Application.Tenancy.Contracts;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.Logging;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Microsoft.Graph.Users.Item.SendMail;
@@ -12,11 +13,22 @@ namespace BrothersCare.Infrastructure.Email;
 
 public sealed class MicrosoftGraphEmailSender(
     GraphServiceClient graphClient,
-    MicrosoftGraphEmailSettings settings) :
+    MicrosoftGraphEmailSettings settings,
+    ILogger<MicrosoftGraphEmailSender> logger) :
     IInvitationSender,
     ICommercialOnboardingSender,
     IPasswordRecoverySender
 {
+    private static readonly Action<ILogger, int, string, Exception?> LogGraphRejection =
+        LoggerMessage.Define<int, string>(LogLevel.Warning,
+            new EventId(2001, "PasswordRecoveryEmailRejected"),
+            "Microsoft Graph rejected a password recovery email. StatusCode {StatusCode}, ExceptionType {ExceptionType}.");
+
+    private static readonly Action<ILogger, string, Exception?> LogAuthenticationFailure =
+        LoggerMessage.Define<string>(LogLevel.Error,
+            new EventId(2002, "PasswordRecoveryEmailAuthenticationFailed"),
+            "Microsoft Graph authentication failed while sending a password recovery email. ExceptionType {ExceptionType}.");
+
     Task IInvitationSender.SendAsync(InvitationDelivery invitation, CancellationToken cancellationToken) =>
         SendInvitationAsync(invitation, settings.ActivationUrl, cancellationToken);
 
@@ -57,12 +69,14 @@ public sealed class MicrosoftGraphEmailSender(
             await SendAsync(delivery.Email, "Redefinição de senha do Brothers Care", body, cancellationToken);
             return true;
         }
-        catch (ApiException)
+        catch (ApiException exception)
         {
+            LogGraphRejection(logger, exception.ResponseStatusCode, exception.GetType().Name, null);
             return false;
         }
-        catch (AuthenticationFailedException)
+        catch (AuthenticationFailedException exception)
         {
+            LogAuthenticationFailure(logger, exception.GetType().Name, null);
             return false;
         }
     }
