@@ -67,8 +67,13 @@ public sealed class GetCurrentSession(
             return null;
         }
 
-        session.RegisterActivity(now, settings.IdleTimeout);
-        await transaction.CommitAsync(cancellationToken);
+        // Avoid a database write on every authenticated request. Besides reducing latency,
+        // this prevents concurrent browser requests from updating the same session row.
+        if (now - session.LastSeenAt >= TimeSpan.FromMinutes(5))
+        {
+            session.RegisterActivity(now, settings.IdleTimeout);
+            await transaction.CommitAsync(cancellationToken);
+        }
         return new AuthenticatedSession(summary with { ExpiresAt = session.IdleExpiresAt },
             new CurrentPrincipal(session.UserId, session.Id, session.ActiveTenantId,
                 summary.PlatformAdministrator?.Role, membership?.Id, membership?.Role, unitIds));

@@ -598,6 +598,10 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("OnboardingUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("nvarchar(2048)");
+
                     b.Property<string>("Phone")
                         .HasMaxLength(11)
                         .HasColumnType("nvarchar(11)");

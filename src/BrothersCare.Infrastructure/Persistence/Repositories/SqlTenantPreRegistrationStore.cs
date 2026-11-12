@@ -15,7 +15,7 @@ public sealed class SqlTenantPreRegistrationStore(BrothersCareDbContext dbContex
                where tenant.Id == tenantId && membership.Role == TenantMembershipRole.ClinicAdministrator
                orderby membership.CreatedAt
                select new TenantPreRegistrationDetails(tenant.Id, tenant.Name, tenant.Cnpj ?? string.Empty,
-                   user.DisplayName, user.Email, tenant.Status.ToString())).FirstOrDefaultAsync(cancellationToken);
+                   user.DisplayName, user.Email, tenant.Status.ToString(), tenant.OnboardingUrl)).FirstOrDefaultAsync(cancellationToken);
 
     public Task<bool> CnpjBelongsToAnotherTenantAsync(Guid tenantId, string cnpj, CancellationToken cancellationToken) =>
         dbContext.Tenants.AsNoTracking().AnyAsync(item => item.Id != tenantId && item.Cnpj == cnpj, cancellationToken);
@@ -79,6 +79,17 @@ public sealed class SqlTenantPreRegistrationStore(BrothersCareDbContext dbContex
         dbContext.Tenants.Remove(tenant);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        return TenantPreRegistrationStatus.Completed;
+    }
+
+    public async Task<TenantPreRegistrationStatus> SetOnboardingUrlAsync(
+        Guid tenantId, string onboardingUrl, CancellationToken cancellationToken)
+    {
+        var tenant = await dbContext.Tenants.SingleOrDefaultAsync(item => item.Id == tenantId, cancellationToken);
+        if (tenant is null) return TenantPreRegistrationStatus.NotFound;
+        if (tenant.Status != TenantStatus.PendingOnboarding) return TenantPreRegistrationStatus.InvalidState;
+        tenant.SetOnboardingUrl(onboardingUrl);
+        await dbContext.SaveChangesAsync(cancellationToken);
         return TenantPreRegistrationStatus.Completed;
     }
 

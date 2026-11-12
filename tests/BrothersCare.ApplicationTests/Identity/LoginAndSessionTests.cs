@@ -118,6 +118,19 @@ public sealed class LoginAndSessionTests
         Assert.Equal(scenario.Clock.GetUtcNow().AddMinutes(30), authenticated.Summary.ExpiresAt);
     }
 
+    [Fact]
+    public async Task SessionDoesNotWriteForEveryRequestWithinTheActivityWindow()
+    {
+        var scenario = new IdentityScenario();
+        var cookie = scenario.SignIn(scenario.AddUser());
+
+        var authenticated = await Sessions(scenario).AuthenticateAsync(cookie, CancellationToken.None);
+
+        Assert.NotNull(authenticated);
+        Assert.Equal(0, scenario.Store.Commits);
+        Assert.Equal(scenario.Clock.GetUtcNow().AddMinutes(30), authenticated.Summary.ExpiresAt);
+    }
+
     [Theory]
     [InlineData("malformed")]
     [InlineData("unknown")]

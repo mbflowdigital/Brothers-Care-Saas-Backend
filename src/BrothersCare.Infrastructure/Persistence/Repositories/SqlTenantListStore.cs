@@ -18,7 +18,18 @@ public sealed class SqlTenantListStore(BrothersCareDbContext dbContext) : ITenan
             where membership.Role == TenantMembershipRole.ClinicAdministrator
             select new { membership.TenantId, membership.CreatedAt, membership.Status, user.DisplayName, user.Email };
 
-        var rows = await query.OrderBy(item => item.Name)
+        var counts = await allTenants.GroupBy(_ => 1).Select(group => new
+        {
+            Total = group.Count(),
+            Pending = group.Count(item => item.Status == TenantStatus.PendingOnboarding),
+            Active = group.Count(item => item.Status == TenantStatus.Active),
+        }).SingleOrDefaultAsync(cancellationToken);
+        var totalItems = string.IsNullOrWhiteSpace(search)
+            ? counts?.Total ?? 0
+            : await query.CountAsync(cancellationToken);
+
+        var rows = await query.OrderByDescending(item => item.CreatedAt)
+            .ThenBy(item => item.Name)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(item => new TenantListRow(
@@ -28,28 +39,19 @@ public sealed class SqlTenantListStore(BrothersCareDbContext dbContext) : ITenan
                 administrators.Where(admin => admin.TenantId == item.Id).OrderBy(admin => admin.CreatedAt)
                     .Select(admin => admin.DisplayName).FirstOrDefault(),
                 administrators.Where(admin => admin.TenantId == item.Id).OrderBy(admin => admin.CreatedAt)
-                    .Select(admin => admin.Email).FirstOrDefault(),
-                query.Count(),
-                allTenants.Count(tenant => tenant.Status == TenantStatus.PendingOnboarding),
-                allTenants.Count(tenant => tenant.Status == TenantStatus.Active)))
+                    .Select(admin => admin.Email).FirstOrDefault()))
             .ToListAsync(cancellationToken);
 
         if (rows.Count == 0)
         {
             if (page > 1) return await ListAsync(search, page - 1, pageSize, cancellationToken);
-            var counts = await allTenants.GroupBy(_ => 1).Select(group => new
-            {
-                Pending = group.Count(item => item.Status == TenantStatus.PendingOnboarding),
-                Active = group.Count(item => item.Status == TenantStatus.Active),
-            }).SingleOrDefaultAsync(cancellationToken);
-            return new TenantPage([], 1, pageSize, 0, 1, counts?.Pending ?? 0, counts?.Active ?? 0);
+            return new TenantPage([], 1, pageSize, totalItems, 1, counts?.Pending ?? 0, counts?.Active ?? 0);
         }
 
-        var first = rows[0];
-        var totalPages = Math.Max(1, (int)Math.Ceiling(first.TotalItems / (double)pageSize));
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalItems / (double)pageSize));
         var items = rows.Select(item => new TenantListItem(item.Id, item.Name, item.Cnpj, item.Status,
             item.FirstAdministratorStatus, item.ResponsibleName, item.ResponsibleEmail)).ToArray();
-        return new TenantPage(items, page, pageSize, first.TotalItems, totalPages, first.PendingCount, first.ActiveCount);
+        return new TenantPage(items, page, pageSize, totalItems, totalPages, counts?.Pending ?? 0, counts?.Active ?? 0);
     }
 
     public async Task<TenantDetails?> GetAsync(Guid tenantId, CancellationToken cancellationToken)
@@ -80,5 +82,5 @@ public sealed class SqlTenantListStore(BrothersCareDbContext dbContext) : ITenan
 
     private sealed record TenantListRow(
         Guid Id, string Name, string? Cnpj, string Status, string FirstAdministratorStatus,
-        string? ResponsibleName, string? ResponsibleEmail, int TotalItems, int PendingCount, int ActiveCount);
+        string? ResponsibleName, string? ResponsibleEmail);
 }
