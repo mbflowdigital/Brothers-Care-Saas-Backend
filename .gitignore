@@ -21,6 +21,7 @@ coverage/
 appsettings.Local.json
 appsettings.*.Local.json
 secrets.json
+src/BrothersCare.Api/App_Data/DevelopmentDataProtectionKeys/
 
 # OS files
 .DS_Store

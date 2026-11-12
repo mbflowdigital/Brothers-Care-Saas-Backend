@@ -61,6 +61,32 @@ public sealed class CompleteOnboardingTests
     }
 
     [Fact]
+    public async Task RevokedTokenDoesNotChangeOnboardingState()
+    {
+        var scenario = new CompletionScenario(revoked: true);
+
+        var result = await scenario.ExecuteAsync();
+
+        Assert.Equal(OnboardingCompletionStatus.RevokedToken, result.Status);
+        Assert.Equal(TenantStatus.PendingOnboarding, scenario.Tenant.Status);
+        Assert.Empty(scenario.Store.Units);
+        Assert.Equal(0, scenario.Store.Commits);
+    }
+
+    [Fact]
+    public async Task UnknownTokenDoesNotChangeOnboardingState()
+    {
+        var scenario = new CompletionScenario();
+
+        var result = await scenario.ExecuteAsync(token: scenario.Tokens.Generate().Secret);
+
+        Assert.Equal(OnboardingCompletionStatus.InvalidToken, result.Status);
+        Assert.Equal(TenantStatus.PendingOnboarding, scenario.Tenant.Status);
+        Assert.Empty(scenario.Store.Units);
+        Assert.Equal(0, scenario.Store.Commits);
+    }
+
+    [Fact]
     public async Task CpfAlreadyOwnedByAnotherUserIsRejected()
     {
         var scenario = new CompletionScenario();
@@ -84,6 +110,20 @@ public sealed class CompleteOnboardingTests
         Assert.Equal(OnboardingCompletionStatus.InvalidCredentials, result.Status);
         Assert.Equal(UserCredentialStatus.Active, scenario.Credential.Status);
         Assert.Equal(0, scenario.Store.Commits);
+    }
+
+    [Fact]
+    public async Task ExistingCredentialUsesItsCurrentPasswordWithoutApplyingNewPasswordPolicy()
+    {
+        var scenario = new CompletionScenario(activeCredentialPassword: "legacy-password");
+        var existingPasswordHash = scenario.Credential.PasswordHash;
+
+        var result = await scenario.ExecuteAsync(password: "legacy-password");
+
+        Assert.Equal(OnboardingCompletionStatus.Completed, result.Status);
+        Assert.Equal(UserCredentialStatus.Active, scenario.Credential.Status);
+        Assert.Equal(existingPasswordHash, scenario.Credential.PasswordHash);
+        Assert.Equal(1, scenario.Store.Commits);
     }
 
     [Fact]
@@ -116,7 +156,7 @@ public sealed class CompleteOnboardingTests
 
     private sealed class CompletionScenario
     {
-        public CompletionScenario(bool expired = false, string? activeCredentialPassword = null)
+        public CompletionScenario(bool expired = false, bool revoked = false, string? activeCredentialPassword = null)
         {
             var now = Clock.GetUtcNow();
             var generated = Tokens.Generate();
@@ -134,6 +174,7 @@ public sealed class CompleteOnboardingTests
                 Guid.NewGuid(), User.Id, AccountActionTokenPurpose.CommercialOnboarding,
                 generated.SecretHash, expired ? now.AddHours(-1) : now,
                 expired ? now.AddMinutes(-1) : now.AddMinutes(30), Membership.Id);
+            if (revoked) Token.Revoke(now);
             Secret = generated.Secret;
             Store = new CompletionStore(User, Credential, Tenant, Membership, Token);
         }
@@ -151,9 +192,9 @@ public sealed class CompleteOnboardingTests
         public CompletionStore Store { get; }
 
         public Task<OnboardingCompletionResult> ExecuteAsync(
-            string password = "SecurePassword123", string cnpj = "11.222.333/0001-81") =>
+            string password = "SecurePassword123", string cnpj = "11.222.333/0001-81", string? token = null) =>
             new CompleteOnboarding(Store, Hasher, Tokens, Clock, Audit).ExecuteAsync(new(
-                Secret,
+                token ?? Secret,
                 cnpj,
                 new("Administradora da Clínica", "529.982.247-25", password, password),
                 new("Clínica Exemplo Ltda.", "Clínica Exemplo", "contato@example.test", "(11) 98765-4321"),

@@ -45,7 +45,8 @@ public static class OnboardingEndpoints
         if (result.Status == OnboardingContextStatus.Ready && result.Context is { } onboarding)
         {
             return TypedResults.Ok(new OnboardingContextResponse(
-                onboarding.Email, onboarding.Cnpj, onboarding.CompanyName, onboarding.ExpiresAt));
+                onboarding.Email, onboarding.Cnpj, onboarding.CompanyName,
+                onboarding.RequiresExistingPassword, onboarding.ExpiresAt));
         }
 
         return result.Status switch
@@ -114,7 +115,8 @@ public static class OnboardingEndpoints
 
         return result.Status switch
         {
-            OnboardingCompletionStatus.Completed => TypedResults.Ok(new OnboardingCompletionResponse("completed", "login")),
+            OnboardingCompletionStatus.Completed when result.TenantId is { } tenantId =>
+                TypedResults.Ok(new OnboardingCompletionResponse("completed", "login", tenantId)),
             OnboardingCompletionStatus.ExpiredToken => Problem(context, StatusCodes.Status410Gone,
                 "Este convite expirou.", "expired-onboarding-token"),
             OnboardingCompletionStatus.RevokedToken => Problem(context, StatusCodes.Status410Gone,
@@ -147,6 +149,7 @@ public sealed record OnboardingContextResponse(
     string Email,
     string Cnpj,
     string? CompanyName,
+    bool RequiresExistingPassword,
     DateTimeOffset ExpiresAt);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -195,4 +198,4 @@ public sealed record OnboardingClinicUnitRequest(
     public override string ToString() => "[REDACTED]";
 }
 
-public sealed record OnboardingCompletionResponse(string Status, string NextAction);
+public sealed record OnboardingCompletionResponse(string Status, string NextAction, Guid TenantId);

@@ -39,6 +39,7 @@ public sealed class SqlCommercialOnboardingSource(BrothersCareDbContext dbContex
         var context = await (
             from membership in dbContext.TenantMemberships.AsNoTracking()
             join user in dbContext.Users.AsNoTracking() on membership.UserId equals user.Id
+            join credential in dbContext.UserCredentials.AsNoTracking() on user.Id equals credential.UserId
             join tenant in dbContext.Tenants.AsNoTracking() on membership.TenantId equals tenant.Id
             where membership.Id == membershipId &&
                   membership.UserId == token.UserId &&
@@ -51,6 +52,7 @@ public sealed class SqlCommercialOnboardingSource(BrothersCareDbContext dbContex
                 user.Email,
                 tenant.Cnpj!,
                 tenant.Name,
+                credential.Status != UserCredentialStatus.PendingActivation && credential.PasswordHash != null,
                 token.ExpiresAt))
             .SingleOrDefaultAsync(cancellationToken);
 

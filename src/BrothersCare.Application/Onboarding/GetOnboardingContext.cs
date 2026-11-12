@@ -44,6 +44,7 @@ public sealed class GetOnboardingContext(
             lookup.Record.AdministratorEmail,
             lookup.Record.Cnpj,
             lookup.Record.CompanyName,
+            lookup.Record.RequiresExistingPassword,
             lookup.Record.ExpiresAt));
     }
 
@@ -75,6 +76,7 @@ public sealed record OnboardingContext(
     string Email,
     string Cnpj,
     string? CompanyName,
+    bool RequiresExistingPassword,
     DateTimeOffset ExpiresAt);
 
 public sealed record OnboardingContextResult(

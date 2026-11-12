@@ -10,18 +10,18 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 var isAdministrativeCommand = args.Contains("--bootstrap-super-administrator", StringComparer.Ordinal) ||
     args.Contains("--issue-super-administrator-activation-token", StringComparer.Ordinal);
 
-if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing"))
+if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
 {
-    var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtectionKeys");
-    Directory.CreateDirectory(dataProtectionKeysPath);
-    builder.Services.AddDataProtection()
-        .SetApplicationName("BrothersCare.Api")
-        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+    // The Windows Event Log may be unavailable to an unprivileged local process.
+    builder.Logging.ClearProviders();
+    builder.Logging.AddConsole();
+    builder.Logging.AddDebug();
 }
 
 builder.Services.AddProblemDetails();
@@ -69,6 +69,26 @@ if (allowedOrigins.Length > 0)
                 .WithMethods("GET", "POST", "PUT", "DELETE")
                 .WithExposedHeaders("Retry-After")
                 .AllowCredentials()));
+}
+
+if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.RemoveAll<IDataProtectionProvider>();
+    var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtectionKeys");
+    Directory.CreateDirectory(dataProtectionKeysPath);
+    builder.Services.AddDataProtection()
+        .SetApplicationName("BrothersCare.Api")
+        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+}
+else
+{
+    // Isolate local cookies from stale or unreadable keys in the Windows user profile.
+    var developmentKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DevelopmentDataProtectionKeys");
+    Directory.CreateDirectory(developmentKeysPath);
+    builder.Services.RemoveAll<IDataProtectionProvider>();
+    builder.Services.AddDataProtection()
+        .SetApplicationName("BrothersCare.Api")
+        .PersistKeysToFileSystem(new DirectoryInfo(developmentKeysPath));
 }
 
 var app = builder.Build();
