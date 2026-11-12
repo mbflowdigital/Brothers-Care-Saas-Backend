@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using BrothersCare.Application.Identity.PasswordChange;
 using BrothersCare.Application.Identity.Sessions;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -32,7 +33,59 @@ public static class SessionEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
+        group.MapPut("/password", ChangePasswordAsync)
+            .RequireAuthorization()
+            .WithName("ChangeCurrentPassword")
+            .WithSummary("Altera a senha da pessoa autenticada e encerra todas as suas sessões.")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
         return group;
+    }
+
+    private static async Task<Results<NoContent, ProblemHttpResult>> ChangePasswordAsync(
+        [FromBody] ChangePasswordHttpRequest? request,
+        [FromServices] ChangePassword changePassword,
+        [FromServices] SessionCookie cookie,
+        [FromServices] IConfiguration configuration,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (!AuthEndpoints.IsAllowedOrigin(context, configuration))
+        {
+            return AuthenticationProblems.Create(context, StatusCodes.Status403Forbidden,
+                "Origem da solicitação não permitida.", "forbidden");
+        }
+
+        if (request is null)
+        {
+            return AuthenticationProblems.Create(context, StatusCodes.Status400BadRequest,
+                "Preencha os dados da nova senha.", "validation");
+        }
+
+        var result = await changePassword.ExecuteAsync(new ChangePasswordCommand(
+            request.CurrentPassword ?? string.Empty,
+            request.NewPassword ?? string.Empty,
+            request.PasswordConfirmation ?? string.Empty), cancellationToken);
+        if (result == PasswordChangeStatus.Changed)
+        {
+            cookie.Clear(context);
+            return TypedResults.NoContent();
+        }
+
+        return result switch
+        {
+            PasswordChangeStatus.InvalidCurrentPassword => AuthenticationProblems.Create(context,
+                StatusCodes.Status400BadRequest, "A senha atual não confere.", "invalid-current-password"),
+            PasswordChangeStatus.InvalidInput => AuthenticationProblems.Create(context,
+                StatusCodes.Status400BadRequest,
+                "A nova senha deve ter ao menos 12 caracteres, com letras e números, e a confirmação deve ser igual.",
+                "validation"),
+            _ => AuthenticationProblems.Create(context, StatusCodes.Status401Unauthorized,
+                "Sua sessão expirou. Entre novamente para alterar a senha.", "authentication-required"),
+        };
     }
 
     private static async Task<Results<NoContent, ProblemHttpResult>> LogoutAsync(
