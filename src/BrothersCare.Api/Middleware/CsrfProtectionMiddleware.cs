@@ -34,6 +34,12 @@ public sealed class CsrfProtectionMiddleware(RequestDelegate next)
             return;
         }
 
+        if (IsTokenAuthorizedOnboardingPath(context.Request.Path))
+        {
+            await next(context);
+            return;
+        }
+
         try
         {
             await antiforgery.ValidateRequestAsync(context);
@@ -47,4 +53,8 @@ public sealed class CsrfProtectionMiddleware(RequestDelegate next)
 
         await next(context);
     }
+
+    private static bool IsTokenAuthorizedOnboardingPath(PathString path) =>
+        path.Equals("/api/v1/onboarding/context", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/api/v1/onboarding/completion", StringComparison.OrdinalIgnoreCase);
 }
