@@ -14,6 +14,7 @@ public sealed record CommercialOnboardingRecord(
     string AdministratorEmail,
     string Cnpj,
     string? CompanyName,
+    bool RequiresExistingPassword,
     DateTimeOffset ExpiresAt);
 
 public enum CommercialOnboardingLookupStatus

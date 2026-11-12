@@ -5,6 +5,7 @@ using System.Text.Json;
 using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Application.Tenancy.Contracts;
 using BrothersCare.Infrastructure.Persistence;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -35,12 +36,18 @@ public sealed class RealOnboardingFlowTests
         {
             await CleanupStrandedTestDataAsync(factory);
             var csrf = await GetCsrfAsync(client);
+            using (var adminLogin = await PostAsync(client, "/api/v1/auth/login",
+                       new { cpf = "admin", password = "admin" }, csrf))
+            {
+                Assert.Equal(HttpStatusCode.OK, adminLogin.StatusCode);
+            }
+            csrf = await GetCsrfAsync(client);
             var successful = TestIdentity.Create();
             var tenantId = await CreateAsync(client, csrf, successful);
             createdTenants.Add(tenantId);
             var token = factory.Sender.TakeToken(successful.Email);
 
-            using (var duplicate = await PostAsync(client, "/api/v1/commercial-onboardings/simulated-payment",
+            using (var duplicate = await PostAsync(client, "/api/v1/tenant-pre-registrations",
                        successful.CommercialRequest, csrf))
             {
                 Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
@@ -63,6 +70,8 @@ public sealed class RealOnboardingFlowTests
                        successful.CompletionRequest(token), csrf))
             {
                 Assert.Equal(HttpStatusCode.OK, completion.StatusCode);
+                using var body = JsonDocument.Parse(await completion.Content.ReadAsStringAsync());
+                Assert.Equal(tenantId, body.RootElement.GetProperty("tenantId").GetGuid());
             }
 
             using (var repeated = await PostAsync(client, "/api/v1/onboarding/completion",
@@ -81,8 +90,14 @@ public sealed class RealOnboardingFlowTests
 
             await AssertSingleCompletedGraphAsync(factory, tenantId);
 
-            using (var login = await PostAsync(client, "/api/v1/auth/login",
-                       new { cpf = successful.Cpf, password = successful.Password }, csrf))
+            using var tenantClient = factory.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                HandleCookies = true,
+            });
+            var tenantCsrf = await GetCsrfAsync(tenantClient);
+            using (var login = await PostAsync(tenantClient, "/api/v1/auth/login",
+                       new { cpf = successful.Cpf, password = successful.Password }, tenantCsrf))
             {
                 Assert.Equal(HttpStatusCode.OK, login.StatusCode);
                 using var body = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
@@ -91,8 +106,8 @@ public sealed class RealOnboardingFlowTests
                 Assert.Equal(tenantId, membership.GetProperty("tenantId").GetGuid());
             }
 
-            csrf = await GetCsrfAsync(client);
-            using (var selection = await PutAsync(client, "/api/v1/auth/active-tenant", new { tenantId }, csrf))
+            tenantCsrf = await GetCsrfAsync(tenantClient);
+            using (var selection = await PutAsync(tenantClient, "/api/v1/auth/active-tenant", new { tenantId }, tenantCsrf))
             {
                 Assert.Equal(HttpStatusCode.OK, selection.StatusCode);
                 using var body = JsonDocument.Parse(await selection.Content.ReadAsStringAsync());
@@ -105,14 +120,14 @@ public sealed class RealOnboardingFlowTests
                 AllowAutoRedirect = false,
                 HandleCookies = true,
             });
-            csrf = await GetCsrfAsync(anonymousClient);
+            var anonymousCsrf = await GetCsrfAsync(anonymousClient);
             var expired = TestIdentity.Create();
-            var expiredTenant = await CreateAsync(anonymousClient, csrf, expired);
+            var expiredTenant = await CreateAsync(client, csrf, expired);
             createdTenants.Add(expiredTenant);
             var expiredToken = factory.Sender.TakeToken(expired.Email);
             await ExpireTokenAsync(factory, expiredTenant);
             using (var response = await PostAsync(anonymousClient, "/api/v1/onboarding/context",
-                       new { token = expiredToken, cnpj = expired.Cnpj }, csrf))
+                       new { token = expiredToken, cnpj = expired.Cnpj }, anonymousCsrf))
             {
                 Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
                 Assert.Equal("expired-onboarding-token", await ReadProblemTypeAsync(response));
@@ -120,12 +135,12 @@ public sealed class RealOnboardingFlowTests
             await AssertPendingGraphAsync(factory, expiredTenant);
 
             var revoked = TestIdentity.Create();
-            var revokedTenant = await CreateAsync(anonymousClient, csrf, revoked);
+            var revokedTenant = await CreateAsync(client, csrf, revoked);
             createdTenants.Add(revokedTenant);
             var revokedToken = factory.Sender.TakeToken(revoked.Email);
             await RevokeTokenAsync(factory, revokedTenant);
             using (var response = await PostAsync(anonymousClient, "/api/v1/onboarding/context",
-                       new { token = revokedToken, cnpj = revoked.Cnpj }, csrf))
+                       new { token = revokedToken, cnpj = revoked.Cnpj }, anonymousCsrf))
             {
                 Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
                 Assert.Equal("revoked-onboarding-token", await ReadProblemTypeAsync(response));
@@ -134,7 +149,7 @@ public sealed class RealOnboardingFlowTests
 
             var rollback = TestIdentity.Create();
             factory.Sender.FailFor(rollback.Email);
-            using (var failed = await PostAsync(anonymousClient, "/api/v1/commercial-onboardings/simulated-payment",
+            using (var failed = await PostAsync(client, "/api/v1/tenant-pre-registrations",
                        rollback.CommercialRequest, csrf))
             {
                 Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
@@ -150,7 +165,11 @@ public sealed class RealOnboardingFlowTests
     private static async Task<string> GetCsrfAsync(HttpClient client)
     {
         using var response = await client.GetAsync("/api/v1/auth/csrf-token");
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var details = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException($"CSRF endpoint returned {(int)response.StatusCode}: {details}");
+        }
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return body.RootElement.GetProperty("token").GetString()!;
     }
@@ -176,7 +195,7 @@ public sealed class RealOnboardingFlowTests
 
     private static async Task<Guid> CreateAsync(HttpClient client, string csrf, TestIdentity identity)
     {
-        using var response = await PostAsync(client, "/api/v1/commercial-onboardings/simulated-payment",
+        using var response = await PostAsync(client, "/api/v1/tenant-pre-registrations",
             identity.CommercialRequest, csrf);
         var responseBody = await response.Content.ReadAsStringAsync();
         Assert.True(response.StatusCode == HttpStatusCode.Created,
@@ -255,6 +274,11 @@ public sealed class RealOnboardingFlowTests
         db.UserCredentials.RemoveRange(db.UserCredentials.Where(item => userIds.Contains(item.UserId)));
         db.Users.RemoveRange(db.Users.Where(item => userIds.Contains(item.Id)));
         await db.SaveChangesAsync();
+
+        db.ChangeTracker.Clear();
+        Assert.False(await db.Tenants.AnyAsync(item => tenantIds.Contains(item.Id)));
+        Assert.False(await db.Users.AnyAsync(item =>
+            item.NormalizedEmail.StartsWith("ONBOARDING-") && item.NormalizedEmail.EndsWith("@EXAMPLE.TEST")));
     }
 
     private static async Task CleanupStrandedTestDataAsync(RealOnboardingFactory factory)
@@ -291,6 +315,7 @@ public sealed class RealOnboardingFlowTests
                 }));
             builder.ConfigureTestServices(services =>
             {
+                services.AddDataProtection().UseEphemeralDataProtectionProvider();
                 services.RemoveAll<ICommercialOnboardingSender>();
                 services.AddSingleton<ICommercialOnboardingSender>(Sender);
             });

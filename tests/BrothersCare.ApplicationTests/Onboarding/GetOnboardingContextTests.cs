@@ -14,7 +14,7 @@ public sealed class GetOnboardingContextTests
         var token = tokenGenerator.Generate();
         var source = new StubSource(new(CommercialOnboardingLookupStatus.Ready, new(
             Guid.NewGuid(), "admin@example.test", "11222333000181", "Clínica Exemplo",
-            clock.GetUtcNow().AddMinutes(30))));
+            true, clock.GetUtcNow().AddMinutes(30))));
         var useCase = new GetOnboardingContext(source, tokenGenerator, clock);
 
         var result = await useCase.ExecuteAsync(token.Secret, "11.222.333/0001-81", CancellationToken.None);
@@ -22,6 +22,7 @@ public sealed class GetOnboardingContextTests
         Assert.Equal(OnboardingContextStatus.Ready, result.Status);
         Assert.Equal("admin@example.test", result.Context?.Email);
         Assert.Equal("11222333000181", result.Context?.Cnpj);
+        Assert.True(result.Context?.RequiresExistingPassword);
         Assert.NotNull(source.ReceivedHash);
         Assert.NotEqual(token.Secret, Convert.ToBase64String(source.ReceivedHash!));
     }
@@ -65,7 +66,7 @@ public sealed class GetOnboardingContextTests
         var tokenGenerator = new TestTokenGenerator();
         var source = new StubSource(new(CommercialOnboardingLookupStatus.Ready, new(
             Guid.NewGuid(), "admin@example.test", "11222333000181", null,
-            clock.GetUtcNow().AddSeconds(-1))));
+            false, clock.GetUtcNow().AddSeconds(-1))));
         var useCase = new GetOnboardingContext(source, tokenGenerator, clock);
 
         var result = await useCase.ExecuteAsync(tokenGenerator.Generate().Secret, "11.222.333/0001-81", CancellationToken.None);
@@ -82,7 +83,7 @@ public sealed class GetOnboardingContextTests
         var token = tokenGenerator.Generate();
         var source = new StubSource(new(CommercialOnboardingLookupStatus.Ready, new(
             Guid.NewGuid(), "admin@example.test", "11222333000181", "Clínica Exemplo",
-            clock.GetUtcNow().AddMinutes(30))));
+            false, clock.GetUtcNow().AddMinutes(30))));
         var useCase = new GetOnboardingContext(source, tokenGenerator, clock);
 
         var result = await useCase.ExecuteAsync(token.Secret, "38.416.176/0001-00", CancellationToken.None);

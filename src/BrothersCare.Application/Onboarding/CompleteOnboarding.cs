@@ -75,7 +75,14 @@ public sealed class CompleteOnboarding(
         }
 
         var needsActivation = credential.Status == UserCredentialStatus.PendingActivation;
+        if (needsActivation && !IsValidNewPassword(
+                command.Administrator.Password, command.Administrator.PasswordConfirmation))
+        {
+            return new(OnboardingCompletionStatus.InvalidInput);
+        }
+
         if (!needsActivation && (credential.Status != UserCredentialStatus.Active || credential.PasswordHash is null ||
+            !IsValidExistingPassword(command.Administrator.Password) ||
             !passwordHasher.Verify(user, credential.PasswordHash, command.Administrator.Password)))
         {
             return new(OnboardingCompletionStatus.InvalidCredentials);
@@ -152,7 +159,7 @@ public sealed class CompleteOnboarding(
         if (string.IsNullOrWhiteSpace(command.Token) || command.Token.Length > 512 ||
             !tokenGenerator.TryHash(command.Token, out tokenHash) ||
             !IsRequired(command.Administrator.DisplayName, 200) ||
-            !IsValidPassword(command.Administrator.Password, command.Administrator.PasswordConfirmation) ||
+            string.IsNullOrEmpty(command.Administrator.Password) || command.Administrator.Password.Length > 128 ||
             !IsRequired(command.Company.LegalName, 200) || !IsRequired(command.Company.TradeName, 200) ||
             !IsRequired(command.Company.CommercialEmail, 320) || !IsRequired(command.Company.Phone, 32) ||
             !IsRequired(command.ClinicUnit.Name, 200) || !IsRequired(command.ClinicUnit.PostalCode, 16) ||
@@ -176,10 +183,13 @@ public sealed class CompleteOnboarding(
         }
     }
 
-    private static bool IsValidPassword(string password, string confirmation) =>
+    private static bool IsValidNewPassword(string password, string confirmation) =>
         password.Length is >= 12 and <= 128 && confirmation.Length <= 128 &&
         password.Any(char.IsUpper) && password.Any(char.IsLower) && password.Any(char.IsDigit) &&
         string.Equals(password, confirmation, StringComparison.Ordinal);
+
+    private static bool IsValidExistingPassword(string password) =>
+        !string.IsNullOrEmpty(password) && password.Length <= 128;
 
     private static bool IsRequired(string? value, int maximumLength) =>
         !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= maximumLength;
