@@ -75,6 +75,7 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.Property(item => item.LegalName).HasMaxLength(200);
         entity.Property(item => item.CommercialEmail).HasMaxLength(320);
         entity.Property(item => item.Phone).HasMaxLength(11);
+        entity.Property(item => item.OnboardingUrl).HasMaxLength(2048);
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
         entity.HasIndex(item => item.Status);
         entity.HasIndex(item => item.Cnpj).IsUnique().HasFilter("[Cnpj] IS NOT NULL");

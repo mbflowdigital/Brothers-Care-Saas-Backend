@@ -9,10 +9,12 @@ public interface ITenantPreRegistrationStore
     Task<TenantPreRegistrationStatus> UpdateAsync(Guid tenantId, TenantPreRegistrationInput input, CancellationToken cancellationToken);
     Task<TenantPreRegistrationStatus> CancelAsync(Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken);
     Task<TenantPreRegistrationStatus> DeleteAsync(Guid tenantId, CancellationToken cancellationToken);
+    Task<TenantPreRegistrationStatus> SetOnboardingUrlAsync(Guid tenantId, string onboardingUrl, CancellationToken cancellationToken);
 }
 
 public sealed record TenantPreRegistrationDetails(
-    Guid Id, string CompanyName, string Cnpj, string ResponsibleName, string ResponsibleEmail, string Status);
+    Guid Id, string CompanyName, string Cnpj, string ResponsibleName, string ResponsibleEmail, string Status,
+    string? OnboardingUrl);
 
 public sealed record TenantPreRegistrationInput(
     string CompanyName, string Cnpj, string ResponsibleName, string ResponsibleEmail);
@@ -56,6 +58,12 @@ public sealed class ManageTenantPreRegistration(ITenantPreRegistrationStore stor
         tenantId == Guid.Empty
             ? Task.FromResult(TenantPreRegistrationStatus.NotFound)
             : store.DeleteAsync(tenantId, cancellationToken);
+
+    public Task<TenantPreRegistrationStatus> SetOnboardingUrlAsync(
+        Guid tenantId, string onboardingUrl, CancellationToken cancellationToken) =>
+        tenantId == Guid.Empty || string.IsNullOrWhiteSpace(onboardingUrl)
+            ? Task.FromResult(TenantPreRegistrationStatus.InvalidInput)
+            : store.SetOnboardingUrlAsync(tenantId, onboardingUrl, cancellationToken);
 
     private static bool TryValidate(TenantPreRegistrationInput input, out string? cnpj)
     {

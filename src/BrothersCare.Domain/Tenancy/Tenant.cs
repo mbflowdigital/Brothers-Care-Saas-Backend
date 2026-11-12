@@ -19,6 +19,7 @@ public sealed class Tenant
         Rename(name);
         CreatedAt = createdAt;
         Status = TenantStatus.Active;
+        OnboardingUrl = null;
     }
 
     public static Tenant CreatePendingOnboarding(Guid id, string name, string cnpj, DateTimeOffset createdAt)
@@ -40,6 +41,8 @@ public sealed class Tenant
     public string? CommercialEmail { get; private set; }
 
     public string? Phone { get; private set; }
+
+    public string? OnboardingUrl { get; private set; }
 
     public TenantStatus Status { get; private set; }
 
@@ -77,6 +80,22 @@ public sealed class Tenant
         SetCnpj(cnpj);
     }
 
+    public void SetOnboardingUrl(string onboardingUrl)
+    {
+        if (Status != TenantStatus.PendingOnboarding)
+        {
+            throw new InvalidOperationException("Only a tenant pending onboarding can receive an onboarding URL.");
+        }
+
+        if (!Uri.TryCreate(onboardingUrl, UriKind.Absolute, out var uri) ||
+            uri.Scheme is not ("http" or "https") || onboardingUrl.Length > 2048)
+        {
+            throw new ArgumentException("A valid absolute onboarding URL is required.", nameof(onboardingUrl));
+        }
+
+        OnboardingUrl = onboardingUrl;
+    }
+
     public void CancelPendingOnboarding()
     {
         if (Status != TenantStatus.PendingOnboarding)
@@ -85,6 +104,7 @@ public sealed class Tenant
         }
 
         Status = TenantStatus.Deactivated;
+        OnboardingUrl = null;
     }
 
     public static string NormalizeCnpj(string cnpj)
@@ -129,6 +149,7 @@ public sealed class Tenant
         }
 
         Status = TenantStatus.Active;
+        OnboardingUrl = null;
     }
 
     public void CompleteOnboarding()
@@ -144,6 +165,7 @@ public sealed class Tenant
         }
 
         Status = TenantStatus.Active;
+        OnboardingUrl = null;
     }
 
     public void Deactivate()
@@ -154,6 +176,7 @@ public sealed class Tenant
         }
 
         Status = TenantStatus.Deactivated;
+        OnboardingUrl = null;
     }
 
     private static char CalculateDigit(string value, IReadOnlyList<int> weights)
