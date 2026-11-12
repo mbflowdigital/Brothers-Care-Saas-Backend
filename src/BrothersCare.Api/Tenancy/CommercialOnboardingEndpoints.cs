@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using BrothersCare.Api.Identity;
+using BrothersCare.Application.Onboarding;
 using BrothersCare.Application.Tenancy;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -220,6 +221,7 @@ public static class CommercialOnboardingEndpoints
     private static async Task<Results<Ok<CommercialOnboardingResendResponse>, ProblemHttpResult>> GetOnboardingLinkAsync(
         Guid tenantId, [FromServices] ManageTenantPreRegistration manager,
         [FromServices] ResendCommercialOnboardingInvitation resendInvitation,
+        [FromServices] GetOnboardingContext getOnboardingContext,
         [FromServices] IConfiguration configuration, HttpContext context, CancellationToken cancellationToken)
     {
         context.Response.Headers.CacheControl = "no-store";
@@ -234,7 +236,8 @@ public static class CommercialOnboardingEndpoints
             return AuthenticationProblems.Create(context, StatusCodes.Status409Conflict,
                 "O onboarding não está mais pendente.", "invalid-state");
         }
-        if (!string.IsNullOrWhiteSpace(item.OnboardingUrl))
+        if (TryGetToken(item.OnboardingUrl, out var storedToken) &&
+            (await getOnboardingContext.ExecuteAsync(storedToken, item.Cnpj, cancellationToken)).Status == OnboardingContextStatus.Ready)
         {
             return TypedResults.Ok(new CommercialOnboardingResendResponse(item.OnboardingUrl));
         }
@@ -250,6 +253,14 @@ public static class CommercialOnboardingEndpoints
                 "Não foi possível preparar o link de onboarding.", "service-unavailable");
         }
         return TypedResults.Ok(new CommercialOnboardingResendResponse(onboardingUrl));
+    }
+
+    private static bool TryGetToken(string? onboardingUrl, out string? token)
+    {
+        token = null;
+        if (!Uri.TryCreate(onboardingUrl, UriKind.Absolute, out var uri)) return false;
+        token = QueryHelpers.ParseQuery(uri.Query)["token"].ToString();
+        return !string.IsNullOrWhiteSpace(token);
     }
 
     private static async Task<Results<Accepted, ProblemHttpResult>> ResendSimulatedAsync(
