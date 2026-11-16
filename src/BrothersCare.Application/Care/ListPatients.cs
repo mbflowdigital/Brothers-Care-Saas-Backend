@@ -33,15 +33,25 @@ public sealed class ListPatients(
             return new(PatientRegistrationStatus.Unauthenticated);
         }
 
-        if (session.ActiveTenantId != tenantId ||
-            !await transaction.HasActiveClinicAdministratorAsync(tenantId, principal.UserId, cancellationToken))
+        if (session.ActiveTenantId != tenantId)
         {
             return new(PatientRegistrationStatus.Forbidden);
         }
 
+        Guid? professionalId = null;
+        if (!await transaction.HasActiveClinicAdministratorAsync(tenantId, principal.UserId, cancellationToken))
+        {
+            professionalId = await transaction.FindActiveProfessionalIdAsync(
+                tenantId, principal.UserId, cancellationToken);
+            if (professionalId is null)
+            {
+                return new(PatientRegistrationStatus.Forbidden);
+            }
+        }
+
         var normalizedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
         return new(PatientRegistrationStatus.Success,
-            await transaction.ListAsync(tenantId, normalizedSearch, page, pageSize, cancellationToken));
+            await transaction.ListAsync(tenantId, professionalId, normalizedSearch, page, pageSize, cancellationToken));
     }
 }
 

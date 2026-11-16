@@ -32,9 +32,15 @@ public interface IPatientRegistrationTransaction : IAsyncDisposable
 
     Task<PatientPage> ListAsync(
         Guid tenantId,
+        Guid? professionalId,
         string? search,
         int page,
         int pageSize,
+        CancellationToken cancellationToken);
+
+    Task<Guid?> FindActiveProfessionalIdAsync(
+        Guid tenantId,
+        Guid userId,
         CancellationToken cancellationToken);
 
     Task<Patient?> FindPatientAsync(Guid tenantId, Guid patientId, CancellationToken cancellationToken);

@@ -12,7 +12,7 @@ public static class PatientEndpoints
     public static IEndpointRouteBuilder MapPatientEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/api/v1/patients", ListAsync)
-            .RequireAuthorization(IdentityPolicies.ClinicAdministrator)
+            .RequireAuthorization()
             .WithTags("Pacientes")
             .WithName("ListPatients")
             .WithSummary("Lista os pacientes da empresa ativa.")

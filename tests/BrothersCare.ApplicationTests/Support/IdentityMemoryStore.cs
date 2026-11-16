@@ -255,12 +255,20 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
 
     public Task<PatientPage> ListAsync(
         Guid tenantId,
+        Guid? professionalId,
         string? search,
         int page,
         int pageSize,
         CancellationToken cancellationToken)
     {
         var query = Patients.Where(item => item.TenantId == tenantId);
+        if (professionalId is { } assignedProfessionalId)
+        {
+            query = query.Where(patient => PatientCareAssignments.Any(assignment =>
+                assignment.TenantId == tenantId && assignment.PatientId == patient.Id &&
+                assignment.ProfessionalId == assignedProfessionalId &&
+                assignment.Status == CareAssignmentStatus.Active));
+        }
         if (search is not null)
         {
             query = query.Where(item => item.FullName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
@@ -282,6 +290,19 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
         }).ToArray();
         var totalPages = ordered.Length == 0 ? 0 : (int)Math.Ceiling(ordered.Length / (double)pageSize);
         return Task.FromResult(new PatientPage(items, page, pageSize, ordered.Length, totalPages));
+    }
+
+    public Task<Guid?> FindActiveProfessionalIdAsync(
+        Guid tenantId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var membership = Memberships.SingleOrDefault(item => item.TenantId == tenantId && item.UserId == userId &&
+            item.Status == MembershipStatus.Active && item.Role == TenantMembershipRole.Professional);
+        var professional = membership is null ? null : Professionals.SingleOrDefault(item =>
+            item.TenantId == tenantId && item.TenantMembershipId == membership.Id &&
+            item.Status == ProfessionalStatus.Active);
+        return Task.FromResult<Guid?>(professional?.Id);
     }
 
     public Task<Patient?> FindPatientAsync(

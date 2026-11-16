@@ -101,12 +101,20 @@ public sealed class SqlPatientRegistrationStore(BrothersCareDbContext dbContext)
 
         public async Task<PatientPage> ListAsync(
             Guid tenantId,
+            Guid? professionalId,
             string? search,
             int page,
             int pageSize,
             CancellationToken cancellationToken)
         {
             var query = context.Patients.AsNoTracking().Where(item => item.TenantId == tenantId);
+            if (professionalId is { } assignedProfessionalId)
+            {
+                query = query.Where(patient => context.PatientCareAssignments.Any(assignment =>
+                    assignment.TenantId == tenantId && assignment.PatientId == patient.Id &&
+                    assignment.ProfessionalId == assignedProfessionalId &&
+                    assignment.Status == CareAssignmentStatus.Active));
+            }
             if (search is not null)
             {
                 query = query.Where(item => item.FullName.Contains(search) ||
@@ -151,6 +159,21 @@ public sealed class SqlPatientRegistrationStore(BrothersCareDbContext dbContext)
             var totalPages = totalItems == 0 ? 0 : (int)Math.Ceiling(totalItems / (double)pageSize);
             return new(items, page, pageSize, totalItems, totalPages);
         }
+
+        public Task<Guid?> FindActiveProfessionalIdAsync(
+            Guid tenantId,
+            Guid userId,
+            CancellationToken cancellationToken) =>
+            (from membership in context.TenantMemberships.AsNoTracking()
+             join professional in context.Professionals.AsNoTracking()
+                 on new { membership.TenantId, MembershipId = (Guid?)membership.Id }
+                 equals new { professional.TenantId, MembershipId = professional.TenantMembershipId }
+             join tenant in context.Tenants.AsNoTracking() on membership.TenantId equals tenant.Id
+             where membership.TenantId == tenantId && membership.UserId == userId &&
+                 membership.Status == MembershipStatus.Active &&
+                 membership.Role == TenantMembershipRole.Professional &&
+                 professional.Status == ProfessionalStatus.Active && tenant.Status == TenantStatus.Active
+             select (Guid?)professional.Id).SingleOrDefaultAsync(cancellationToken);
 
         public Task<Patient?> FindPatientAsync(
             Guid tenantId,
