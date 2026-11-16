@@ -194,12 +194,19 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("CouncilState")
+                        .HasMaxLength(2)
+                        .HasColumnType("nvarchar(2)");
+
                     b.Property<string>("CouncilType")
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("DefaultAppointmentDurationMinutes")
+                        .HasColumnType("int");
 
                     b.Property<string>("FullName")
                         .IsRequired()

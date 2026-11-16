@@ -54,7 +54,8 @@ public static class InvitationEndpoints
         if (request?.Role is null || request.ClinicUnitIds is null)
             return TeamProblem(context, TenantTeamMutationStatus.InvalidInput);
         var result = await manageTenantTeam.UpdateAsync(membershipId, request.Role, request.ClinicUnitIds,
-            request.PerformsCare, request.Specialty, request.CouncilType, request.RegistrationNumber, cancellationToken);
+            request.PerformsCare, request.Specialty, request.CouncilType, request.RegistrationNumber,
+            request.CouncilState, request.DefaultAppointmentDurationMinutes, cancellationToken);
         return result == TenantTeamMutationStatus.Success ? TypedResults.NoContent() : TeamProblem(context, result);
     }
 
@@ -94,7 +95,8 @@ public static class InvitationEndpoints
                     item.Role, item.Status, item.CreatedAt,
                     item.Units.Select(unit => new TenantTeamUnitResponse(unit.Id, unit.Name)).ToArray(),
                     item.UserId == principalAccessor.Principal?.UserId,
-                    item.PerformsCare, item.Specialty, item.CouncilType, item.RegistrationNumber)).ToArray()),
+                    item.PerformsCare, item.Specialty, item.CouncilType, item.RegistrationNumber,
+                    item.CouncilState, item.DefaultAppointmentDurationMinutes)).ToArray()),
             TenantTeamStatus.Forbidden => AuthenticationProblems.Create(context, StatusCodes.Status403Forbidden,
                 "Você não tem permissão para consultar a equipe desta empresa.", "forbidden"),
             _ => AuthenticationProblems.Create(context, StatusCodes.Status401Unauthorized,
@@ -117,7 +119,8 @@ public static class InvitationEndpoints
 
         var result = await inviteTenantUser.ExecuteAsync(new InviteTenantUserCommand(
             request.Email, request.DisplayName, request.Role, request.ClinicUnitIds,
-            request.PerformsCare, request.Specialty, request.CouncilType, request.RegistrationNumber), cancellationToken);
+            request.PerformsCare, request.Specialty, request.CouncilType, request.RegistrationNumber,
+            request.CouncilState, request.DefaultAppointmentDurationMinutes), cancellationToken);
         if (result == InvitationStatus.Accepted)
         {
             return TypedResults.Accepted((string?)null);
@@ -154,7 +157,9 @@ public sealed record InviteTenantUserHttpRequest(
     bool PerformsCare,
     string? Specialty,
     string? CouncilType,
-    string? RegistrationNumber)
+    string? RegistrationNumber,
+    string? CouncilState,
+    int? DefaultAppointmentDurationMinutes)
 {
     public override string ToString() => "[REDACTED]";
 }
@@ -166,7 +171,9 @@ public sealed record UpdateTenantTeamMemberRequest(
     bool PerformsCare,
     string? Specialty,
     string? CouncilType,
-    string? RegistrationNumber);
+    string? RegistrationNumber,
+    string? CouncilState,
+    int? DefaultAppointmentDurationMinutes);
 
 public sealed record TenantTeamMemberResponse(
     Guid MembershipId,
@@ -181,6 +188,8 @@ public sealed record TenantTeamMemberResponse(
     bool PerformsCare,
     string? Specialty,
     string? CouncilType,
-    string? RegistrationNumber);
+    string? RegistrationNumber,
+    string? CouncilState,
+    int? DefaultAppointmentDurationMinutes);
 
 public sealed record TenantTeamUnitResponse(Guid Id, string Name);

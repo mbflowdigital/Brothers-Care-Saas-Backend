@@ -86,7 +86,9 @@ public sealed class SqlTenantInvitationStore(BrothersCareDbContext dbContext) : 
                 profile?.Status == ProfessionalStatus.Active,
                 profile?.Specialty,
                 profile?.CouncilType,
-                profile?.RegistrationNumber);
+                profile?.RegistrationNumber,
+                profile?.CouncilState,
+                profile?.DefaultAppointmentDurationMinutes);
             }).ToArray();
         }
 
@@ -131,7 +133,8 @@ public sealed class SqlTenantInvitationStore(BrothersCareDbContext dbContext) : 
 
         public async Task SetProfessionalProfileAsync(Guid tenantId, Guid membershipId, string displayName,
             bool performsCare, string? specialty, string? councilType, string? registrationNumber,
-            DateTimeOffset now, CancellationToken cancellationToken)
+            string? councilState, int? defaultAppointmentDurationMinutes, DateTimeOffset now,
+            CancellationToken cancellationToken)
         {
             var profile = await context.Professionals.SingleOrDefaultAsync(item =>
                 item.TenantId == tenantId && item.TenantMembershipId == membershipId, cancellationToken);
@@ -143,11 +146,12 @@ public sealed class SqlTenantInvitationStore(BrothersCareDbContext dbContext) : 
 
             if (profile is null)
             {
-                profile = new Professional(Guid.NewGuid(), tenantId, displayName, specialty!, registrationNumber!, now);
+                profile = new Professional(Guid.NewGuid(), tenantId, displayName, specialty, registrationNumber, now);
                 context.Professionals.Add(profile);
             }
 
-            profile.ConfigureForMembership(membershipId, displayName, specialty!, councilType!, registrationNumber!);
+            profile.ConfigureForMembership(membershipId, displayName, specialty, councilType, registrationNumber,
+                councilState, defaultAppointmentDurationMinutes);
         }
 
         public async Task RevokePreviousInvitationsAsync(Guid membershipId, DateTimeOffset now, CancellationToken cancellationToken)

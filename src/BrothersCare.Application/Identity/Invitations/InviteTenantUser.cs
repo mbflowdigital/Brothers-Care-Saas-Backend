@@ -123,7 +123,8 @@ public sealed class InviteTenantUser(
 
         await transaction.SetUnitMembershipsAsync(tenantId, membership.Id, command.ClinicUnitIds, now, cancellationToken);
         await transaction.SetProfessionalProfileAsync(tenantId, membership.Id, user.DisplayName,
-            command.PerformsCare, command.Specialty, command.CouncilType, command.RegistrationNumber, now, cancellationToken);
+            command.PerformsCare, command.Specialty, command.CouncilType, command.RegistrationNumber,
+            command.CouncilState, command.DefaultAppointmentDurationMinutes, now, cancellationToken);
         await transaction.RevokePreviousInvitationsAsync(membership.Id, now, cancellationToken);
         await transaction.RevokeTenantSessionsAsync(tenantId, user.Id, now, cancellationToken);
         var generated = tokenGenerator.Generate();
@@ -148,19 +149,23 @@ public sealed class InviteTenantUser(
             command.ClinicUnitIds is not null && command.ClinicUnitIds.All(id => id != Guid.Empty) &&
             command.ClinicUnitIds.Distinct().Count() == command.ClinicUnitIds.Count &&
             IsProfessionalConfigurationValid(role, command.PerformsCare,
-                command.Specialty, command.CouncilType, command.RegistrationNumber);
+                command.Specialty, command.CouncilType, command.RegistrationNumber,
+                command.CouncilState, command.DefaultAppointmentDurationMinutes);
     }
 
     private static bool IsProfessionalConfigurationValid(TenantMembershipRole role, bool performsCare,
-        string? specialty, string? councilType, string? registrationNumber)
+        string? specialty, string? councilType, string? registrationNumber, string? councilState,
+        int? defaultAppointmentDurationMinutes)
     {
         if (role == TenantMembershipRole.Receptionist) return !performsCare;
         if (role == TenantMembershipRole.Professional && !performsCare) return false;
-        return !performsCare || IsRequired(specialty, 150) && IsRequired(councilType, 30) && IsRequired(registrationNumber, 100);
+        return !performsCare || IsOptional(specialty, 150) && IsOptional(councilType, 30) &&
+            IsOptional(registrationNumber, 100) && IsOptional(councilState, 2) &&
+            defaultAppointmentDurationMinutes is null or >= 5 and <= 480;
     }
 
-    private static bool IsRequired(string? value, int maximumLength) =>
-        !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= maximumLength;
+    private static bool IsOptional(string? value, int maximumLength) =>
+        string.IsNullOrWhiteSpace(value) || value.Trim().Length <= maximumLength;
 }
 
 public sealed record InviteTenantUserCommand(
@@ -171,7 +176,9 @@ public sealed record InviteTenantUserCommand(
     bool PerformsCare,
     string? Specialty,
     string? CouncilType,
-    string? RegistrationNumber)
+    string? RegistrationNumber,
+    string? CouncilState = null,
+    int? DefaultAppointmentDurationMinutes = null)
 {
     public override string ToString() => "[REDACTED]";
 }
