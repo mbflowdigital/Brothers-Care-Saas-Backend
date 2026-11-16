@@ -45,14 +45,15 @@ public sealed class ManageClinicUnits(
             return new(ClinicUnitOperationStatus.DefaultUnitCannotBeDeactivated);
         }
 
+        var now = timeProvider.GetUtcNow();
         var appointments = await transaction.FindFutureScheduledAppointmentsAsync(
             context.TenantId.Value,
             clinicUnitId,
-            timeProvider.GetUtcNow(),
+            now,
             cancellationToken);
         foreach (var appointment in appointments)
         {
-            appointment.Cancel();
+            appointment.Cancel("Unidade desativada.", context.MembershipId!.Value, now);
         }
 
         unit.Deactivate();
@@ -177,7 +178,13 @@ public sealed class ManageClinicUnits(
             return new(ClinicUnitOperationStatus.Forbidden);
         }
 
-        return new(ClinicUnitOperationStatus.Success, tenantId, transaction);
+        if (principal.TenantMembershipId is not { } membershipId)
+        {
+            await transaction.DisposeAsync();
+            return new(ClinicUnitOperationStatus.Forbidden);
+        }
+
+        return new(ClinicUnitOperationStatus.Success, tenantId, membershipId, transaction);
     }
 
     private static bool IsValidName(string name) => !string.IsNullOrWhiteSpace(name) && name.Trim().Length <= 200;
@@ -219,4 +226,5 @@ public sealed record ClinicUnitDeactivationResult(
 internal sealed record AuthorizedClinicUnitContext(
     ClinicUnitOperationStatus Status,
     Guid? TenantId = null,
+    Guid? MembershipId = null,
     IClinicUnitTransaction? Transaction = null);

@@ -96,28 +96,64 @@ As regras identificadas como **propostas** orientam a implementação e os teste
 
 ## Agenda e atendimentos
 
-### Informações mínimas propostas
+As regras de criação e transição desta seção estão aprovadas para o fluxo em que o profissional agenda um atendimento para um paciente sob seus cuidados. A leitura da agenda também permite que um administrador da clínica visualize os agendamentos do tenant ativo, com filtros por profissional e unidade; essa permissão não autoriza acesso a outro tenant.
 
-- Um atendimento referencia tenant, unidade, paciente, profissional, início, fim e estado.
-- Paciente, profissional e unidade devem ser ativos e pertencer ao mesmo tenant no momento da criação.
-- O profissional deve ter vínculo de unidade e vínculo de cuidado compatíveis com o atendimento. A regra para criar vínculo automaticamente ainda precisa de decisão; a proposta é exigir vínculo prévio.
+### Informações mínimas
 
-### Estados e transições propostas
+- Um atendimento referencia obrigatoriamente tenant, unidade, paciente, profissional, início, fim, estado, ator da criação e data da criação.
+- A observação administrativa do agendamento é opcional, possui no máximo 1.000 caracteres e não deve ser usada para armazenar evolução ou informação clínica.
+- O tenant, o profissional e o ator são derivados da sessão autenticada. O comando enviado pelo profissional não aceita `tenantId`, `professionalId` ou identificador do ator como fonte confiável.
+- Datas e horas usam `date-time` com offset obrigatório. O horário final deve ser posterior ao inicial.
+
+### Autorização e escopo
+
+- O profissional autenticado agenda somente para si mesmo.
+- Tenant, unidade, paciente, profissional, membership e vínculo de cuidado devem estar ativos no momento da criação.
+- Todos os recursos envolvidos devem pertencer ao tenant ativo da sessão.
+- O paciente deve possuir vínculo de cuidado ativo com o profissional. O agendamento não cria esse vínculo automaticamente.
+- O profissional deve possuir vínculo ativo com a unidade escolhida.
+- O paciente pode ser atendido em qualquer unidade ativa do tenant em que o profissional possua vínculo ativo; a unidade registrada originalmente no vínculo de cuidado não limita o local do atendimento.
+- Um profissional não pode consultar ou alterar agendamentos de outro profissional, mesmo que envie outro `professionalId` como filtro. Administradores da clínica podem consultar agendas de profissionais somente no tenant ativo.
+- Outros papéis não recebem acesso à agenda por inferência; uma permissão específica deve ser aprovada e validada no servidor.
+- Empresa suspensa ou unidade inativa não aceita novos agendamentos. Aplicam-se também as regras de suspensão e desativação descritas em `tenant-unit-access-rules.md`.
+
+### Estados e transições
 
 | Estado | Significado | Transições permitidas |
 | --- | --- | --- |
-| `Agendado` | Horário reservado e ainda não realizado. | `Realizado`, `Falta`, `Cancelado` ou reagendamento |
+| `Agendado` | Horário reservado e ainda não realizado. | `Realizado`, `Falta`, `Cancelado` ou reagendamento. |
 | `Realizado` | Atendimento ocorreu. | Nenhuma transição direta; correções exigem fluxo auditado a definir. |
 | `Falta` | Paciente não compareceu. | Nenhuma transição direta; correções exigem fluxo auditado a definir. |
 | `Cancelado` | Atendimento não ocorrerá. | Nenhuma; um novo atendimento pode ser criado. |
 
-### Regras propostas
+### Criação, conflito e concorrência
 
-- Reagendar altera início e fim de um atendimento em estado `Agendado`, registra auditoria e revalida conflitos. Não cria um atendimento adicional.
-- Horário final deve ser posterior ao inicial.
-- Não pode haver sobreposição de atendimentos ativos para o mesmo profissional. A operação deve decidir se a mesma restrição também vale para paciente, sala, equipamento ou deslocamento domiciliar.
-- Cancelamento e falta devem registrar motivo e ator. A lista de motivos precisa ser definida com a operação.
+- Não é permitido criar um agendamento cujo início esteja no passado no instante em que o servidor processa a operação.
+- Um atendimento deve possuir duração máxima de 24 horas. Durações padrão por serviço ou profissional serão definidas junto da disponibilidade.
+- Não pode haver sobreposição de agendamentos em estado `Agendado` para o mesmo profissional.
+- Não pode haver sobreposição de agendamentos em estado `Agendado` para o mesmo paciente, mesmo que sejam com profissionais ou unidades diferentes.
+- Horários adjacentes não são sobreposição. Por exemplo, `09:00–10:00` e `10:00–11:00` são válidos.
+- A sobreposição ocorre quando `existente.inicio < novo.fim` e `existente.fim > novo.inicio`.
+- Agendamentos `Realizado`, `Falta` e `Cancelado` não reservam horário para a validação de novos agendamentos.
+- A verificação de conflito e a gravação devem ocorrer na mesma transação e considerar requisições concorrentes.
+- Disponibilidade semanal, intervalos, férias e bloqueios do profissional serão tratados em uma etapa posterior. Até essa implementação, estar sem conflito não representa disponibilidade configurada.
+
+### Reagendamento, cancelamento e encerramento
+
+- Reagendar altera início, fim e, quando solicitado, unidade de um atendimento em estado `Agendado`, registra auditoria e revalida todas as regras de escopo e conflito. Não cria outro atendimento.
+- Cancelar, marcar falta ou concluir só é permitido ao profissional responsável enquanto o atendimento estiver `Agendado`.
+- Cancelamento e falta devem registrar motivo, ator e data/hora. No MVP, o motivo é texto livre obrigatório de até 500 caracteres; um catálogo poderá ser criado posteriormente.
+- Um atendimento só pode ser marcado como `Realizado` ou `Falta` quando seu horário de início tiver sido alcançado.
+- Cancelamento preserva o atendimento e libera o intervalo para novos agendamentos.
+- `Realizado`, `Falta` e `Cancelado` são estados finais no MVP. Correções exigirão um fluxo auditado futuro.
 - Não é permitido finalizar uma evolução para atendimento cancelado ou marcado como falta.
+
+### Consulta
+
+- A agenda do profissional retorna somente atendimentos em que ele seja o profissional responsável. O administrador da clínica pode consultar profissionais do tenant ativo e filtrar opcionalmente por profissional e unidade.
+- Toda consulta de agenda exige intervalo inicial e final, com período máximo de 93 dias por requisição.
+- A resposta pode conter dados cadastrais mínimos do paciente, profissional e unidade necessários à agenda, sem expor conteúdo de evoluções clínicas.
+- A interface apresenta os horários no fuso da unidade selecionada. Esse fuso é retornado junto às unidades e aos agendamentos.
 
 ## Evoluções clínicas
 

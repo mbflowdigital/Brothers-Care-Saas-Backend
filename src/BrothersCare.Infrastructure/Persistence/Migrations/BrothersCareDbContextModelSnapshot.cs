@@ -27,14 +27,47 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CancelledByMembershipId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("ClinicUnitId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CompletedByMembershipId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<Guid?>("CreatedByMembershipId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset>("EndsAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("NoShowAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("NoShowByMembershipId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("NoShowReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uniqueidentifier");
@@ -51,15 +84,33 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("UpdatedByMembershipId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "CancelledByMembershipId");
+
+                    b.HasIndex("TenantId", "CompletedByMembershipId");
+
+                    b.HasIndex("TenantId", "CreatedByMembershipId");
+
+                    b.HasIndex("TenantId", "NoShowByMembershipId");
+
+                    b.HasIndex("TenantId", "UpdatedByMembershipId");
 
                     b.HasIndex("TenantId", "ClinicUnitId", "StartsAt");
 
                     b.HasIndex("TenantId", "PatientId", "StartsAt");
 
                     b.HasIndex("TenantId", "ProfessionalId", "StartsAt");
+
+                    b.HasIndex("TenantId", "Status", "StartsAt");
 
                     b.ToTable("appointments", (string)null);
                 });
@@ -539,6 +590,11 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId");
@@ -670,12 +726,36 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("BrothersCare.Domain.Care.Appointment", b =>
                 {
+                    b.HasOne("BrothersCare.Domain.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "CancelledByMembershipId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("BrothersCare.Domain.Tenancy.ClinicUnit", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "ClinicUnitId")
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("BrothersCare.Domain.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "CompletedByMembershipId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("BrothersCare.Domain.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "CreatedByMembershipId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("BrothersCare.Domain.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "NoShowByMembershipId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("BrothersCare.Domain.Care.Patient", null)
                         .WithMany()
@@ -690,6 +770,12 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("BrothersCare.Domain.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "UpdatedByMembershipId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("BrothersCare.Domain.Care.ClinicalRecord", b =>

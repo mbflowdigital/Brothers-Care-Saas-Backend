@@ -96,7 +96,7 @@ public sealed class SqlPatientRegistrationStore(BrothersCareDbContext dbContext)
             await context.ClinicUnits.AsNoTracking()
                 .Where(item => item.TenantId == tenantId && item.IsActive)
                 .OrderBy(item => item.Name)
-                .Select(item => new PatientClinicUnitOption(item.Id, item.Name))
+                .Select(item => new PatientClinicUnitOption(item.Id, item.Name, item.TimeZoneId))
                 .ToListAsync(cancellationToken);
 
         public async Task<PatientPage> ListAsync(
