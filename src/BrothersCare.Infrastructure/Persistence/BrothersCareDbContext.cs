@@ -187,7 +187,9 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.Property(item => item.CouncilState).HasMaxLength(2);
         entity.Property(item => item.RegistrationNumber).HasMaxLength(100).IsRequired();
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
-        entity.HasIndex(item => new { item.TenantId, item.RegistrationNumber }).IsUnique();
+        entity.HasIndex(item => new { item.TenantId, item.RegistrationNumber })
+            .IsUnique()
+            .HasFilter("[RegistrationNumber] <> N''");
         entity.HasIndex(item => new { item.TenantId, item.TenantMembershipId }).IsUnique()
             .HasFilter("[TenantMembershipId] IS NOT NULL");
         entity.HasIndex(item => new { item.TenantId, item.Status, item.FullName });

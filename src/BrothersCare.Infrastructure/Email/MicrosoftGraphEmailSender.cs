@@ -29,8 +29,13 @@ public sealed class MicrosoftGraphEmailSender(
             new EventId(2002, "PasswordRecoveryEmailAuthenticationFailed"),
             "Microsoft Graph authentication failed while sending a password recovery email. ExceptionType {ExceptionType}.");
 
+    private static readonly Action<ILogger, string, Exception?> LogInvitationFailure =
+        LoggerMessage.Define<string>(LogLevel.Error,
+            new EventId(2003, "InvitationEmailFailed"),
+            "Microsoft Graph failed to deliver an invitation. ExceptionType {ExceptionType}.");
+
     Task IInvitationSender.SendAsync(InvitationDelivery invitation, CancellationToken cancellationToken) =>
-        SendInvitationAsync(invitation, settings.ActivationUrl, cancellationToken);
+        SendInvitationWithLoggingAsync(invitation, settings.ActivationUrl, cancellationToken);
 
     Task ICommercialOnboardingSender.SendAsync(InvitationDelivery invitation, CancellationToken cancellationToken) =>
         SendInvitationAsync(invitation, settings.CommercialOnboardingUrl, cancellationToken);
@@ -52,6 +57,22 @@ public sealed class MicrosoftGraphEmailSender(
             <p>Se você não reconhece este convite, ignore esta mensagem.</p>
             """;
         await SendAsync(invitation.Email, "Convite para o Brothers Care", body, cancellationToken);
+    }
+
+    private async Task SendInvitationWithLoggingAsync(
+        InvitationDelivery invitation,
+        Uri destinationUrl,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await SendInvitationAsync(invitation, destinationUrl, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            LogInvitationFailure(logger, exception.GetType().Name, exception);
+            throw;
+        }
     }
 
     public async Task<bool> TrySendAsync(PasswordRecoveryDelivery delivery, CancellationToken cancellationToken)
