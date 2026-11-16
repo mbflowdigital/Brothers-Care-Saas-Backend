@@ -1,3 +1,4 @@
+using BrothersCare.Application.Care.Contracts;
 using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Application.Identity.Sessions;
 using BrothersCare.Application.Tenancy;
@@ -14,7 +15,8 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     IPlatformAdministratorStore, IPlatformAdministratorTransaction, ITenantInvitationStore, ITenantInvitationTransaction,
     ITenantProvisioningStore, ITenantProvisioningTransaction, ITenantInvitationPlanUsageStore,
     ICommercialOnboardingStore, ICommercialOnboardingTransaction,
-    ITenantLifecycleStore, ITenantLifecycleTransaction, IClinicUnitStore, IClinicUnitTransaction
+    ITenantLifecycleStore, ITenantLifecycleTransaction, IClinicUnitStore, IClinicUnitTransaction,
+    IPatientRegistrationStore, IPatientRegistrationTransaction
 {
     public List<User> Users { get; } = [];
     public List<UserCredential> Credentials { get; } = [];
@@ -25,6 +27,8 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     public List<ClinicUnit> Units { get; } = [];
     public List<Appointment> Appointments { get; } = [];
     public List<Professional> Professionals { get; } = [];
+    public List<Patient> Patients { get; } = [];
+    public List<PatientCareAssignment> PatientCareAssignments { get; } = [];
     public List<TenantMembership> Memberships { get; } = [];
     public List<ClinicUnitMembership> UnitMemberships { get; } = [];
     public int Commits { get; private set; }
@@ -40,6 +44,8 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     Task<ICommercialOnboardingTransaction> ICommercialOnboardingStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<ICommercialOnboardingTransaction>(this);
     Task<ITenantLifecycleTransaction> ITenantLifecycleStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<ITenantLifecycleTransaction>(this);
     Task<IClinicUnitTransaction> IClinicUnitStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<IClinicUnitTransaction>(this);
+    Task<IPatientRegistrationTransaction> IPatientRegistrationStore.BeginAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IPatientRegistrationTransaction>(this);
 
     public Task<User?> FindUserAsync(string normalizedEmail, CancellationToken cancellationToken)
     {
@@ -194,6 +200,102 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     public void AddTenant(Tenant tenant) => Tenants.Add(tenant);
     public void AddClinicUnit(ClinicUnit unit) => Units.Add(unit);
     public void Add(ClinicUnit clinicUnit) => Units.Add(clinicUnit);
+    public void Add(Patient patient) => Patients.Add(patient);
+    public void Add(PatientCareAssignment assignment) => PatientCareAssignments.Add(assignment);
+
+    public Task<PatientAssignmentTarget?> FindAssignmentTargetAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid clinicUnitId,
+        CancellationToken cancellationToken)
+    {
+        var professional = Professionals.SingleOrDefault(item => item.TenantId == tenantId &&
+            item.Id == professionalId && item.Status == ProfessionalStatus.Active &&
+            item.TenantMembershipId is not null);
+        var unit = Units.SingleOrDefault(item => item.TenantId == tenantId && item.Id == clinicUnitId && item.IsActive);
+        var membership = professional?.TenantMembershipId is { } membershipId
+            ? Memberships.SingleOrDefault(item => item.TenantId == tenantId && item.Id == membershipId &&
+                item.Status == MembershipStatus.Active)
+            : null;
+        var linked = membership is not null && UnitMemberships.Any(item => item.TenantId == tenantId &&
+            item.TenantMembershipId == membership.Id && item.ClinicUnitId == clinicUnitId);
+        return Task.FromResult(linked && unit is not null
+            ? new PatientAssignmentTarget(professional!.Id, unit.Id)
+            : null);
+    }
+
+    public Task<IReadOnlyList<PatientProfessionalOption>> ListProfessionalOptionsAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<PatientProfessionalOption> result = Professionals
+            .Where(item => item.TenantId == tenantId && item.Status == ProfessionalStatus.Active &&
+                item.TenantMembershipId is not null)
+            .OrderBy(item => item.FullName)
+            .Select(item => new PatientProfessionalOption(item.Id, item.FullName, item.Specialty,
+                UnitMemberships.Where(link => link.TenantId == tenantId &&
+                        link.TenantMembershipId == item.TenantMembershipId &&
+                        Units.Any(unit => unit.TenantId == tenantId && unit.Id == link.ClinicUnitId && unit.IsActive))
+                    .Select(link => link.ClinicUnitId).ToArray()))
+            .ToArray();
+        return Task.FromResult(result);
+    }
+
+    public Task<IReadOnlyList<PatientClinicUnitOption>> ListClinicUnitOptionsAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<PatientClinicUnitOption> result = Units
+            .Where(item => item.TenantId == tenantId && item.IsActive)
+            .OrderBy(item => item.Name)
+            .Select(item => new PatientClinicUnitOption(item.Id, item.Name))
+            .ToArray();
+        return Task.FromResult(result);
+    }
+
+    public Task<PatientPage> ListAsync(
+        Guid tenantId,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var query = Patients.Where(item => item.TenantId == tenantId);
+        if (search is not null)
+        {
+            query = query.Where(item => item.FullName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                (item.HealthPlan?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        var ordered = query.OrderBy(item => item.FullName).ToArray();
+        var items = ordered.Skip((page - 1) * pageSize).Take(pageSize).Select(patient =>
+        {
+            var assignment = PatientCareAssignments.SingleOrDefault(item =>
+                item.TenantId == tenantId && item.PatientId == patient.Id &&
+                item.Status == CareAssignmentStatus.Active);
+            var professional = assignment is null
+                ? null
+                : Professionals.SingleOrDefault(item => item.Id == assignment.ProfessionalId);
+            return new PatientListItem(patient.Id, patient.FullName, patient.BirthDate, patient.HealthPlan,
+                patient.Status.ToString(), professional?.Id, professional?.FullName, assignment?.ClinicUnitId,
+                patient.CreatedAt);
+        }).ToArray();
+        var totalPages = ordered.Length == 0 ? 0 : (int)Math.Ceiling(ordered.Length / (double)pageSize);
+        return Task.FromResult(new PatientPage(items, page, pageSize, ordered.Length, totalPages));
+    }
+
+    public Task<Patient?> FindPatientAsync(
+        Guid tenantId,
+        Guid patientId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(Patients.SingleOrDefault(item => item.TenantId == tenantId && item.Id == patientId));
+
+    public Task<PatientCareAssignment?> FindActiveAssignmentAsync(
+        Guid tenantId,
+        Guid patientId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(PatientCareAssignments.SingleOrDefault(item => item.TenantId == tenantId &&
+            item.PatientId == patientId && item.Status == CareAssignmentStatus.Active));
     public void AddMembership(TenantMembership membership) => Memberships.Add(membership);
     public void AddUnitMembership(ClinicUnitMembership membership) => UnitMemberships.Add(membership);
 

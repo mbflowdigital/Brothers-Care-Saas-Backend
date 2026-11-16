@@ -126,6 +126,10 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("HealthPlan")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 

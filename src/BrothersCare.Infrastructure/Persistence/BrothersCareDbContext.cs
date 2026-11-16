@@ -166,6 +166,7 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.ToTable("patients");
         ConfigureTenantScopedKey(entity);
         entity.Property(item => item.FullName).HasMaxLength(200).IsRequired();
+        entity.Property(item => item.HealthPlan).HasMaxLength(150);
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
         entity.HasIndex(item => new { item.TenantId, item.Status, item.FullName });
         entity.HasOne<Tenant>()

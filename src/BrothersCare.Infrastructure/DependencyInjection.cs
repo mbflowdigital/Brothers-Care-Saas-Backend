@@ -1,4 +1,6 @@
 using Azure.Identity;
+using BrothersCare.Application.Care;
+using BrothersCare.Application.Care.Contracts;
 using BrothersCare.Application.Identity;
 using BrothersCare.Application.Identity.Activation;
 using BrothersCare.Application.Identity.Contracts;
@@ -88,6 +90,11 @@ public static class DependencyInjection
             services.AddScoped<ChangeTenantLifecycle>();
             services.AddScoped<IClinicUnitStore, SqlClinicUnitStore>();
             services.AddScoped<ManageClinicUnits>();
+            services.AddScoped<IPatientRegistrationStore, SqlPatientRegistrationStore>();
+            services.AddScoped<RegisterPatient>();
+            services.AddScoped<GetPatientRegistrationOptions>();
+            services.AddScoped<ListPatients>();
+            services.AddScoped<ManagePatient>();
             services.AddScoped<ITenantInvitationStore, SqlTenantInvitationStore>();
             services.AddScoped<ListTenantTeam>();
             services.AddScoped<ManageTenantTeam>();
