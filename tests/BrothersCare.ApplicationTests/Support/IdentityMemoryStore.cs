@@ -184,7 +184,8 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
                  where link.TenantId == tenantId && link.TenantMembershipId == membership.Id
                  select new TenantTeamUnit(unit.Id, unit.Name)).ToArray(),
                 profile?.Status == ProfessionalStatus.Active, profile?.Specialty,
-                profile?.CouncilType, profile?.RegistrationNumber)).ToArray());
+                profile?.CouncilType, profile?.RegistrationNumber, profile?.CouncilState,
+                profile?.DefaultAppointmentDurationMinutes)).ToArray());
     public Task<int> CountActiveAdministratorsAsync(Guid tenantId, CancellationToken cancellationToken) =>
         Task.FromResult(Memberships.Count(item => item.TenantId == tenantId && item.Status == MembershipStatus.Active && item.Role == TenantMembershipRole.ClinicAdministrator));
     public Task<bool> AreUnitsActiveAsync(Guid tenantId, IReadOnlyList<Guid> unitIds, CancellationToken cancellationToken) => Task.FromResult(unitIds.All(id => Units.Any(item => item.Id == id && item.TenantId == tenantId && item.IsActive)));
@@ -329,7 +330,8 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
 
     public Task SetProfessionalProfileAsync(Guid tenantId, Guid membershipId, string displayName,
         bool performsCare, string? specialty, string? councilType, string? registrationNumber,
-        DateTimeOffset now, CancellationToken cancellationToken)
+        string? councilState, int? defaultAppointmentDurationMinutes, DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
         var profile = Professionals.SingleOrDefault(item => item.TenantId == tenantId && item.TenantMembershipId == membershipId);
         if (!performsCare)
@@ -340,12 +342,19 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
 
         if (profile is null)
         {
-            profile = new Professional(Guid.NewGuid(), tenantId, displayName, specialty!, registrationNumber!, now);
+            profile = new Professional(Guid.NewGuid(), tenantId, displayName, specialty, registrationNumber, now);
             Professionals.Add(profile);
         }
-        profile.ConfigureForMembership(membershipId, displayName, specialty!, councilType!, registrationNumber!);
+        profile.ConfigureForMembership(membershipId, displayName, specialty, councilType, registrationNumber,
+            councilState, defaultAppointmentDurationMinutes);
         return Task.CompletedTask;
     }
+
+    public Task SetProfessionalProfileAsync(Guid tenantId, Guid membershipId, string displayName,
+        bool performsCare, string? specialty, string? councilType, string? registrationNumber,
+        DateTimeOffset now, CancellationToken cancellationToken) =>
+        SetProfessionalProfileAsync(tenantId, membershipId, displayName, performsCare, specialty,
+            councilType, registrationNumber, null, null, now, cancellationToken);
 
     public Task RevokeSessionsAsync(Guid userId, DateTimeOffset now, CancellationToken cancellationToken) => RevokeSessionsAsync(userId, now, SessionRevocationReason.PasswordChanged, cancellationToken);
     public Task RevokeSessionsAsync(Guid userId, DateTimeOffset now, SessionRevocationReason reason, CancellationToken cancellationToken)

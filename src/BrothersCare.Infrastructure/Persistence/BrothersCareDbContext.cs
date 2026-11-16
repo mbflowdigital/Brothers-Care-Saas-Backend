@@ -183,6 +183,7 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.Property(item => item.FullName).HasMaxLength(200).IsRequired();
         entity.Property(item => item.Specialty).HasMaxLength(150).IsRequired();
         entity.Property(item => item.CouncilType).HasMaxLength(30);
+        entity.Property(item => item.CouncilState).HasMaxLength(2);
         entity.Property(item => item.RegistrationNumber).HasMaxLength(100).IsRequired();
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
         entity.HasIndex(item => new { item.TenantId, item.RegistrationNumber }).IsUnique();
