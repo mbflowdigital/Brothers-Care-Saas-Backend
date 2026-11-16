@@ -237,7 +237,8 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "RegistrationNumber")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[RegistrationNumber] <> N''");
 
                     b.HasIndex("TenantId", "TenantMembershipId")
                         .IsUnique()

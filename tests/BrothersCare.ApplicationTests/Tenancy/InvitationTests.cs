@@ -199,16 +199,37 @@ public sealed class InvitationTests
     }
 
     [Fact]
-    public async Task MissingDeliveryOrFullPlanDoesNotCreateUserOrInvitation()
+    public async Task MissingDeliveryStillCreatesManualInvitationButFullPlanDoesNot()
     {
         var scenario = AdminScenario();
         var command = Command("new@example.invalid", scenario.Store.Units[0].Id);
         Assert.Equal(InvitationStatus.PlanLimitExceeded, await Invite(scenario, maximumMemberships: 1).ExecuteAsync(command, CancellationToken.None));
-        Assert.Equal(InvitationStatus.DeliveryUnavailable, await Invite(scenario, senderAvailable: false).ExecuteAsync(command, CancellationToken.None));
-        Assert.Single(scenario.Store.Users);
-        Assert.Single(scenario.Store.Memberships);
-        Assert.Empty(scenario.Store.Tokens);
-        Assert.Equal(0, scenario.Store.Commits);
+        var result = await Invite(scenario, senderAvailable: false).IssueAsync(command, CancellationToken.None);
+        Assert.Equal(InvitationStatus.Accepted, result.Status);
+        Assert.False(result.EmailDelivered);
+        Assert.NotNull(result.Token);
+        Assert.Equal(2, scenario.Store.Users.Count);
+        Assert.Equal(2, scenario.Store.Memberships.Count);
+        Assert.Single(scenario.Store.Tokens);
+        Assert.Equal(1, scenario.Store.Commits);
+    }
+
+    [Fact]
+    public async Task EmailFailureKeepsInvitationAvailableForManualDelivery()
+    {
+        var scenario = AdminScenario();
+        var service = new InviteTenantUser(scenario, scenario.Store,
+            new ProvisionalTenantInvitationPlanPolicy(scenario.Store, new ProvisionalInvitationPlanSettings(25)),
+            scenario.Tokens, new ThrowingInvitationSender(), scenario.Clock, scenario);
+
+        var result = await service.IssueAsync(Command("manual@example.invalid", scenario.Store.Units[0].Id),
+            CancellationToken.None);
+
+        Assert.Equal(InvitationStatus.Accepted, result.Status);
+        Assert.False(result.EmailDelivered);
+        Assert.NotNull(result.Token);
+        Assert.Single(scenario.Store.Tokens);
+        Assert.Equal(1, scenario.Store.Commits);
     }
 
     private static IdentityScenario AdminScenario()
@@ -227,4 +248,10 @@ public sealed class InvitationTests
 
     private static InviteTenantUserCommand Command(string email, Guid unitId) =>
         new(email, "Pessoa convidada", "Professional", [unitId], true, "Psicologia", "CRP", "06/123456");
+
+    private sealed class ThrowingInvitationSender : IInvitationSender
+    {
+        public Task SendAsync(InvitationDelivery invitation, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Simulated delivery failure.");
+    }
 }
