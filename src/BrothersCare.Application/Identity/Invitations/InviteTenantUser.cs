@@ -15,7 +15,10 @@ public sealed class InviteTenantUser(
     TimeProvider timeProvider,
     IAuthenticationAudit audit)
 {
-    public async Task<InvitationStatus> ExecuteAsync(InviteTenantUserCommand command, CancellationToken cancellationToken)
+    public async Task<InvitationStatus> ExecuteAsync(InviteTenantUserCommand command, CancellationToken cancellationToken) =>
+        (await IssueAsync(command, cancellationToken)).Status;
+
+    public async Task<InviteTenantUserResult> IssueAsync(InviteTenantUserCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
         var principal = principalAccessor.Principal;
@@ -88,11 +91,6 @@ public sealed class InviteTenantUser(
             return plan == InvitationPlanDecision.LimitExceeded ? InvitationStatus.PlanLimitExceeded : InvitationStatus.PlanUnavailable;
         }
 
-        if (sender is null)
-        {
-            return InvitationStatus.DeliveryUnavailable;
-        }
-
         var now = timeProvider.GetUtcNow();
         if (!session.IsValidAt(now))
         {
@@ -132,10 +130,24 @@ public sealed class InviteTenantUser(
         transaction.AddToken(new AccountActionToken(Guid.NewGuid(), user.Id,
             AccountActionTokenPurpose.InvitationAcceptance, generated.SecretHash, now, expiresAt, membership.Id));
         await transaction.SaveAsync(cancellationToken);
-        await sender.SendAsync(new InvitationDelivery(user.Email, command.DisplayName.Trim(), tenant.Name, generated.Secret, expiresAt), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        var delivered = false;
+        if (sender is not null)
+        {
+            try
+            {
+                await sender.SendAsync(new InvitationDelivery(user.Email, command.DisplayName.Trim(), tenant.Name,
+                    generated.Secret, expiresAt), cancellationToken);
+                delivered = true;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException && !cancellationToken.IsCancellationRequested)
+            {
+                _ = exception;
+            }
+        }
+
         audit.Record(renewed ? AuthenticationAuditEvent.InvitationReissued : AuthenticationAuditEvent.InvitationIssued, now);
-        return InvitationStatus.Accepted;
+        return new(InvitationStatus.Accepted, generated.Secret, expiresAt, delivered);
     }
 
     private static bool IsValid(InviteTenantUserCommand command, out TenantMembershipRole role)
@@ -166,6 +178,15 @@ public sealed class InviteTenantUser(
 
     private static bool IsOptional(string? value, int maximumLength) =>
         string.IsNullOrWhiteSpace(value) || value.Trim().Length <= maximumLength;
+}
+
+public sealed record InviteTenantUserResult(
+    InvitationStatus Status,
+    string? Token = null,
+    DateTimeOffset? ExpiresAt = null,
+    bool EmailDelivered = false)
+{
+    public static implicit operator InviteTenantUserResult(InvitationStatus status) => new(status);
 }
 
 public sealed record InviteTenantUserCommand(

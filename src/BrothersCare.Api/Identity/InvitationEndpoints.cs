@@ -3,6 +3,7 @@ using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Application.Identity.Invitations;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace BrothersCare.Api.Identity;
 
@@ -17,7 +18,7 @@ public static class InvitationEndpoints
             .WithName("InviteTenantUser")
             .WithSummary("Convida uma pessoa para a empresa e unidades autorizadas da sessão.")
             .WithDescription("Exige administrador clínico, membership ativa e unidades permitidas. O tenant é derivado da sessão. Papéis: ClinicAdministrator, Professional ou Receptionist.")
-            .Produces(StatusCodes.Status202Accepted)
+            .Produces<InviteTenantUserResponse>(StatusCodes.Status202Accepted)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -104,7 +105,7 @@ public static class InvitationEndpoints
         };
     }
 
-    private static async Task<Results<Accepted, ProblemHttpResult>> InviteAsync(
+    private static async Task<Results<Accepted<InviteTenantUserResponse>, ProblemHttpResult>> InviteAsync(
         [FromBody] InviteTenantUserHttpRequest? request,
         [FromServices] InviteTenantUser inviteTenantUser,
         HttpContext context,
@@ -117,16 +118,21 @@ public static class InvitationEndpoints
                 "Informe e-mail, nome, papel e unidades iniciais.", "validation");
         }
 
-        var result = await inviteTenantUser.ExecuteAsync(new InviteTenantUserCommand(
+        var result = await inviteTenantUser.IssueAsync(new InviteTenantUserCommand(
             request.Email, request.DisplayName, request.Role, request.ClinicUnitIds,
             request.PerformsCare, request.Specialty, request.CouncilType, request.RegistrationNumber,
             request.CouncilState, request.DefaultAppointmentDurationMinutes), cancellationToken);
-        if (result == InvitationStatus.Accepted)
+        if (result.Status == InvitationStatus.Accepted)
         {
-            return TypedResults.Accepted((string?)null);
+            var activationUrl = context.RequestServices.GetRequiredService<IConfiguration>()["Email:Links:ActivationUrl"];
+            var manualUrl = !string.IsNullOrWhiteSpace(activationUrl) && result.Token is not null
+                ? QueryHelpers.AddQueryString(activationUrl, "token", result.Token)
+                : null;
+            return TypedResults.Accepted((string?)null, new InviteTenantUserResponse(
+                result.EmailDelivered ? "sent" : "manual-required", manualUrl, result.ExpiresAt));
         }
 
-        return result switch
+        return result.Status switch
         {
             InvitationStatus.Unauthenticated => AuthenticationProblems.Create(context, StatusCodes.Status401Unauthorized,
                 "Sessão ausente, inválida ou expirada.", "authentication-required"),
@@ -193,3 +199,8 @@ public sealed record TenantTeamMemberResponse(
     int? DefaultAppointmentDurationMinutes);
 
 public sealed record TenantTeamUnitResponse(Guid Id, string Name);
+
+public sealed record InviteTenantUserResponse(
+    string DeliveryStatus,
+    string? ActivationUrl,
+    DateTimeOffset? ExpiresAt);
