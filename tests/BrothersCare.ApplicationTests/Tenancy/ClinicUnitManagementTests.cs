@@ -76,7 +76,7 @@ public sealed class ClinicUnitManagementTests
         var future = CreateAppointment(unit, now.AddDays(1));
         var past = CreateAppointment(unit, now.AddDays(-1));
         var completed = CreateAppointment(unit, now.AddDays(2));
-        completed.MarkCompleted();
+        completed.MarkCompleted(Guid.NewGuid(), completed.StartsAt);
         scenario.Store.Appointments.AddRange([future, past, completed]);
 
         var result = await Service(scenario).DeactivateAsync(unit.Id, CancellationToken.None);
@@ -115,6 +115,6 @@ public sealed class ClinicUnitManagementTests
     }
 
     private static Appointment CreateAppointment(ClinicUnit unit, DateTimeOffset startsAt) =>
-        new(Guid.NewGuid(), unit.TenantId, unit.Id, Guid.NewGuid(), Guid.NewGuid(), startsAt,
-            startsAt.AddHours(1), startsAt.AddDays(-1));
+        new(Guid.NewGuid(), unit.TenantId, unit.Id, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), startsAt,
+            startsAt.AddHours(1), null, startsAt.AddDays(-1));
 }

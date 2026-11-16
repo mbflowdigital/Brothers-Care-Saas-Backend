@@ -1,6 +1,7 @@
 using BrothersCare.Application.Care.Contracts;
 using BrothersCare.Application.Identity.Contracts;
 using BrothersCare.Application.Identity.Sessions;
+using BrothersCare.Application.Scheduling.Contracts;
 using BrothersCare.Application.Tenancy;
 using BrothersCare.Application.Tenancy.Contracts;
 using BrothersCare.Domain.Care;
@@ -16,7 +17,7 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     ITenantProvisioningStore, ITenantProvisioningTransaction, ITenantInvitationPlanUsageStore,
     ICommercialOnboardingStore, ICommercialOnboardingTransaction,
     ITenantLifecycleStore, ITenantLifecycleTransaction, IClinicUnitStore, IClinicUnitTransaction,
-    IPatientRegistrationStore, IPatientRegistrationTransaction
+    IPatientRegistrationStore, IPatientRegistrationTransaction, IAppointmentStore, IAppointmentTransaction
 {
     public List<User> Users { get; } = [];
     public List<UserCredential> Credentials { get; } = [];
@@ -46,6 +47,8 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     Task<IClinicUnitTransaction> IClinicUnitStore.BeginAsync(CancellationToken cancellationToken) => Task.FromResult<IClinicUnitTransaction>(this);
     Task<IPatientRegistrationTransaction> IPatientRegistrationStore.BeginAsync(CancellationToken cancellationToken) =>
         Task.FromResult<IPatientRegistrationTransaction>(this);
+    Task<IAppointmentTransaction> IAppointmentStore.BeginAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IAppointmentTransaction>(this);
 
     public Task<User?> FindUserAsync(string normalizedEmail, CancellationToken cancellationToken)
     {
@@ -90,12 +93,167 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     public Task<bool> IsTenantActiveAsync(Guid tenantId, CancellationToken cancellationToken) => Task.FromResult(Tenants.Any(item => item.Id == tenantId && item.Status == TenantStatus.Active));
     public Task<bool> HasCredentialAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(Credentials.Any(item => item.UserId == userId));
     public Task<bool> HasActiveCredentialAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(Credentials.Any(item => item.UserId == userId && item.Status == UserCredentialStatus.Active));
+    public Task<TenantMembershipRole?> FindActiveMembershipRoleAsync(
+        Guid tenantId,
+        Guid userId,
+        Guid membershipId,
+        CancellationToken cancellationToken)
+    {
+        var membership = Memberships.SingleOrDefault(item =>
+            item.TenantId == tenantId && item.Id == membershipId && item.UserId == userId &&
+            item.Status == MembershipStatus.Active);
+        var tenantIsActive = Tenants.Any(item => item.Id == tenantId && item.Status == TenantStatus.Active);
+        return Task.FromResult(membership is null || !tenantIsActive
+            ? null
+            : (TenantMembershipRole?)membership.Role);
+    }
+
     public Task<bool> IsSessionActiveAsync(Guid sessionId, Guid userId, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(Sessions.Any(item => item.Id == sessionId && item.UserId == userId && item.IsValidAt(now)));
     public Task<bool> IsActiveSuperAdministratorAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(Administrators.Any(item => item.UserId == userId && item.Status == PlatformAdministratorStatus.Active && item.Role == PlatformAdministratorRole.SuperAdministrator));
     public Task<bool> HasActiveClinicAdministratorAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
         Task.FromResult(Memberships.Any(item => item.TenantId == tenantId && item.UserId == userId &&
             item.Status == MembershipStatus.Active && item.Role == TenantMembershipRole.ClinicAdministrator) &&
             Tenants.Any(item => item.Id == tenantId && item.Status == TenantStatus.Active));
+
+    public Task<SchedulingProfessional?> FindActiveProfessionalAsync(
+        Guid tenantId,
+        Guid userId,
+        Guid membershipId,
+        CancellationToken cancellationToken)
+    {
+        var membership = Memberships.SingleOrDefault(item => item.TenantId == tenantId && item.Id == membershipId &&
+            item.UserId == userId && item.Status == MembershipStatus.Active);
+        var tenantIsActive = Tenants.Any(item => item.Id == tenantId && item.Status == TenantStatus.Active);
+        var professional = membership is null ? null : Professionals.SingleOrDefault(item =>
+            item.TenantId == tenantId && item.TenantMembershipId == membership.Id &&
+            item.Status == ProfessionalStatus.Active);
+        return Task.FromResult(professional is null || !tenantIsActive
+            ? null
+            : new SchedulingProfessional(
+                professional.Id,
+                membership!.Id,
+                professional.DefaultAppointmentDurationMinutes));
+    }
+
+    public Task<bool> IsActiveUnitLinkedAsync(
+        Guid tenantId,
+        Guid membershipId,
+        Guid clinicUnitId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(Units.Any(item => item.TenantId == tenantId && item.Id == clinicUnitId && item.IsActive) &&
+            UnitMemberships.Any(item => item.TenantId == tenantId && item.TenantMembershipId == membershipId &&
+                item.ClinicUnitId == clinicUnitId));
+
+    public Task<bool> IsActivePatientAssignedAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid patientId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(Patients.Any(item => item.TenantId == tenantId && item.Id == patientId &&
+                item.Status == PatientStatus.Active) &&
+            PatientCareAssignments.Any(item => item.TenantId == tenantId && item.PatientId == patientId &&
+                item.ProfessionalId == professionalId && item.Status == CareAssignmentStatus.Active));
+
+    public Task<IReadOnlyList<SchedulingPatientOption>> ListPatientOptionsAsync(
+        Guid tenantId,
+        Guid professionalId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<SchedulingPatientOption>>(
+            (from assignment in PatientCareAssignments
+             join patient in Patients on assignment.PatientId equals patient.Id
+             where assignment.TenantId == tenantId && patient.TenantId == tenantId &&
+                 assignment.ProfessionalId == professionalId && assignment.Status == CareAssignmentStatus.Active &&
+                 patient.Status == PatientStatus.Active
+             orderby patient.FullName, patient.Id
+             select new SchedulingPatientOption(patient.Id, patient.FullName, patient.HealthPlan)).ToArray());
+
+    public Task<IReadOnlyList<SchedulingClinicUnitOption>> ListClinicUnitOptionsAsync(
+        Guid tenantId,
+        Guid membershipId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<SchedulingClinicUnitOption>>(
+            (from link in UnitMemberships
+             join unit in Units on link.ClinicUnitId equals unit.Id
+             where link.TenantId == tenantId && unit.TenantId == tenantId &&
+                 link.TenantMembershipId == membershipId && unit.IsActive
+             orderby unit.Name, unit.Id
+             select new SchedulingClinicUnitOption(unit.Id, unit.Name, unit.TimeZoneId)).ToArray());
+
+    public Task<AppointmentConflicts> FindConflictsAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid patientId,
+        DateTimeOffset startsAt,
+        DateTimeOffset endsAt,
+        CancellationToken cancellationToken)
+    {
+        var overlapping = Appointments.Where(item => item.TenantId == tenantId &&
+            item.Status == AppointmentStatus.Scheduled && item.StartsAt < endsAt && item.EndsAt > startsAt).ToArray();
+        return Task.FromResult(new AppointmentConflicts(
+            overlapping.Any(item => item.ProfessionalId == professionalId),
+            overlapping.Any(item => item.PatientId == patientId)));
+    }
+
+    public Task<IReadOnlyList<AppointmentScheduleItem>> ListAppointmentsAsync(
+        Guid tenantId,
+        Guid? professionalId,
+        Guid? clinicUnitId,
+        DateTimeOffset from,
+        DateTimeOffset through,
+        AppointmentStatus? status,
+        CancellationToken cancellationToken)
+    {
+        var result = Appointments
+            .Where(item => item.TenantId == tenantId &&
+                (professionalId is null || item.ProfessionalId == professionalId) &&
+                (clinicUnitId is null || item.ClinicUnitId == clinicUnitId) &&
+                item.StartsAt >= from && item.StartsAt <= through && (status is null || item.Status == status))
+            .OrderBy(item => item.StartsAt)
+            .ThenBy(item => item.Id)
+            .Select(ToScheduleItem)
+            .Where(item => item is not null)
+            .Cast<AppointmentScheduleItem>()
+            .ToArray();
+        return Task.FromResult<IReadOnlyList<AppointmentScheduleItem>>(result);
+    }
+
+    public Task<AppointmentScheduleItem?> FindAppointmentAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid appointmentId,
+        CancellationToken cancellationToken)
+    {
+        var appointment = Appointments.SingleOrDefault(item =>
+            item.TenantId == tenantId && item.ProfessionalId == professionalId && item.Id == appointmentId);
+        return Task.FromResult(appointment is null ? null : ToScheduleItem(appointment));
+    }
+
+    private AppointmentScheduleItem? ToScheduleItem(Appointment appointment)
+    {
+        var patient = Patients.SingleOrDefault(item =>
+            item.TenantId == appointment.TenantId && item.Id == appointment.PatientId);
+        var unit = Units.SingleOrDefault(item =>
+            item.TenantId == appointment.TenantId && item.Id == appointment.ClinicUnitId);
+        var professional = Professionals.SingleOrDefault(item =>
+            item.TenantId == appointment.TenantId && item.Id == appointment.ProfessionalId);
+        return patient is null || unit is null || professional is null
+            ? null
+            : new AppointmentScheduleItem(
+                appointment.Id,
+                appointment.ProfessionalId,
+                professional.FullName,
+                patient.Id,
+                patient.FullName,
+                unit.Id,
+                unit.Name,
+                unit.TimeZoneId,
+                appointment.StartsAt,
+                appointment.EndsAt,
+                appointment.Notes,
+                appointment.Status.ToString(),
+                appointment.CreatedAt,
+                appointment.UpdatedAt);
+    }
 
     public Task<TenantMembership?> FindSelectableMembershipAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) => Task.FromResult(Memberships.SingleOrDefault(item => item.UserId == userId && item.TenantId == tenantId && item.Status == MembershipStatus.Active && Tenants.Any(tenant => tenant.Id == tenantId && tenant.Status == TenantStatus.Active)));
 
@@ -203,6 +361,7 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     public void Add(ClinicUnit clinicUnit) => Units.Add(clinicUnit);
     public void Add(Patient patient) => Patients.Add(patient);
     public void Add(PatientCareAssignment assignment) => PatientCareAssignments.Add(assignment);
+    public void Add(Appointment appointment) => Appointments.Add(appointment);
 
     public Task<PatientAssignmentTarget?> FindAssignmentTargetAsync(
         Guid tenantId,
@@ -249,7 +408,7 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
         IReadOnlyList<PatientClinicUnitOption> result = Units
             .Where(item => item.TenantId == tenantId && item.IsActive)
             .OrderBy(item => item.Name)
-            .Select(item => new PatientClinicUnitOption(item.Id, item.Name))
+            .Select(item => new PatientClinicUnitOption(item.Id, item.Name, item.TimeZoneId))
             .ToArray();
         return Task.FromResult(result);
     }

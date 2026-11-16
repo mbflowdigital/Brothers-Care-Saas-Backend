@@ -1,4 +1,8 @@
 @BrothersCare_Api_HostAddress = http://localhost:5100
+@sessionCookie = replace-with-bc_session-cookie
+@clinicAdminSessionCookie = replace-with-clinic-administrator-session-cookie
+@csrfToken = replace-with-csrf-token
+@appointmentId = 3fa85f64-5717-4562-b3fc-2c963f66afa6
 
 GET {{BrothersCare_Api_HostAddress}}/health/live
 Accept: application/json
@@ -7,3 +11,42 @@ Accept: application/json
 
 GET {{BrothersCare_Api_HostAddress}}/health/ready
 Accept: application/json
+
+###
+
+GET {{BrothersCare_Api_HostAddress}}/api/v1/auth/csrf-token
+Accept: application/json
+
+###
+
+GET {{BrothersCare_Api_HostAddress}}/api/v1/appointments?from=2026-11-18T00:00:00-03:00&to=2026-11-19T23:59:59-03:00&status=Scheduled
+Accept: application/json
+Cookie: bc_session={{sessionCookie}}
+
+###
+
+### Agenda administrativa (use uma sessão ClinicAdministrator)
+GET {{BrothersCare_Api_HostAddress}}/api/v1/appointments?from=2026-11-18T00:00:00-03:00&to=2026-11-19T23:59:59-03:00&clinicUnitId=4fa85f64-5717-4562-b3fc-2c963f66afa6&professionalId=5fa85f64-5717-4562-b3fc-2c963f66afa6
+Accept: application/json
+Cookie: bc_session={{clinicAdminSessionCookie}}
+
+###
+
+GET {{BrothersCare_Api_HostAddress}}/api/v1/appointments/{{appointmentId}}
+Accept: application/json
+Cookie: bc_session={{sessionCookie}}
+
+###
+
+POST {{BrothersCare_Api_HostAddress}}/api/v1/appointments
+Content-Type: application/json
+Cookie: bc_session={{sessionCookie}}
+X-CSRF-Token: {{csrfToken}}
+
+{
+  "patientId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "clinicUnitId": "4fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "startsAt": "2026-11-18T09:00:00-03:00",
+  "endsAt": "2026-11-18T10:00:00-03:00",
+  "notes": "Retorno de acompanhamento"
+}

@@ -2,11 +2,18 @@ namespace BrothersCare.Domain.Tenancy;
 
 public sealed class ClinicUnit
 {
+    public const string DefaultTimeZoneId = "America/Sao_Paulo";
+
     private ClinicUnit()
     {
     }
 
-    public ClinicUnit(Guid id, Guid tenantId, string name, DateTimeOffset createdAt)
+    public ClinicUnit(
+        Guid id,
+        Guid tenantId,
+        string name,
+        DateTimeOffset createdAt,
+        string timeZoneId = DefaultTimeZoneId)
     {
         if (id == Guid.Empty || tenantId == Guid.Empty)
         {
@@ -16,6 +23,7 @@ public sealed class ClinicUnit
         Id = id;
         TenantId = tenantId;
         Rename(name);
+        ChangeTimeZone(timeZoneId);
         CreatedAt = createdAt;
         IsActive = true;
     }
@@ -46,6 +54,8 @@ public sealed class ClinicUnit
 
     public string? Phone { get; private set; }
 
+    public string TimeZoneId { get; private set; } = DefaultTimeZoneId;
+
     public DateTimeOffset CreatedAt { get; private set; }
 
     public void Rename(string name)
@@ -53,6 +63,9 @@ public sealed class ClinicUnit
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         Name = name.Trim();
     }
+
+    public void ChangeTimeZone(string timeZoneId) =>
+        TimeZoneId = NormalizeRequiredText(timeZoneId, 100, nameof(timeZoneId));
 
     public void ConfigureContactAndAddress(
         string postalCode,

@@ -1,11 +1,11 @@
 # Brothers Care API
 
-Fundação técnica da API SaaS do Brothers Care. Esta etapa estabelece arquitetura, configuração HTTP, qualidade e documentação; ela não contém funcionalidades de negócio.
+API SaaS do Brothers Care em Clean Architecture. Além da fundação HTTP, já contém fluxos de identidade, tenancy, cadastro de pacientes e agenda descritos no OpenAPI e nas regras de negócio.
 
 ## Requisitos
 
 - .NET SDK 10.0.301 ou patch compatível da linha 10.0, conforme `global.json`.
-- SQL Server é necessário para executar funcionalidades persistentes quando forem adicionadas. A fundação HTTP e os health checks continuam podendo ser executados sem banco configurado.
+- SQL Server é necessário para executar funcionalidades persistentes. Os health checks continuam podendo ser executados sem banco configurado.
 
 ## Comandos locais
 
@@ -17,10 +17,12 @@ dotnet format BrothersCare.slnx --verify-no-changes --no-restore
 dotnet run --project src/BrothersCare.Api
 ```
 
-Em `Development`, a interface Swagger fica em `/swagger`. Os únicos endpoints funcionais são:
+Em `Development`, a interface Swagger fica em `/swagger`. Os health checks são:
 
 - `GET /health/live`: confirma que o processo HTTP está ativo;
 - `GET /health/ready`: executará verificações de dependências marcadas com a tag `ready` quando elas existirem.
+
+As rotas funcionais de identidade, tenancy, pacientes e agenda são publicadas no OpenAPI. A agenda inclui opções e criação para profissionais e consultas por período; a visão de agenda para administradores é limitada ao tenant ativo.
 
 ## Configuração local
 
@@ -91,7 +93,7 @@ As versões NuGet ficam em `Directory.Packages.props`; regras comuns de compila�
 
 ## Regras de negócio
 
-A proposta de regras e transições de estado para pacientes, profissionais, agenda, evoluções, financeiro e assinaturas está em [docs/mvp-business-rules.md](docs/mvp-business-rules.md). O documento distingue regras propostas de comportamentos ainda não aprovados.
+As regras e transições de estado para pacientes, profissionais, agenda, evoluções, financeiro e assinaturas estão em [docs/mvp-business-rules.md](docs/mvp-business-rules.md). A seção de agenda contém as decisões aprovadas para o agendamento realizado pelo profissional e deve ser consultada antes de alterar esse fluxo.
 
 As convenções propostas para OpenAPI, contratos HTTP, paginação, filtros, datas, valores monetários e erros estão em [docs/http-api-contracts.md](docs/http-api-contracts.md).
 

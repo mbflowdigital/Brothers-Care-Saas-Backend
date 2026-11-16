@@ -111,6 +111,7 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.Property(item => item.City).HasMaxLength(100);
         entity.Property(item => item.State).HasMaxLength(2);
         entity.Property(item => item.Phone).HasMaxLength(11);
+        entity.Property(item => item.TimeZoneId).HasMaxLength(100).IsRequired();
         entity.HasIndex(item => new { item.TenantId, item.Name }).IsUnique();
         entity.HasIndex(item => item.TenantId, "UX_clinic_units_default_per_tenant")
             .IsUnique()
@@ -236,9 +237,13 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.ToTable("appointments");
         ConfigureTenantScopedKey(entity);
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
+        entity.Property(item => item.Notes).HasMaxLength(Appointment.NotesMaxLength);
+        entity.Property(item => item.NoShowReason).HasMaxLength(Appointment.ReasonMaxLength);
+        entity.Property(item => item.CancellationReason).HasMaxLength(Appointment.ReasonMaxLength);
         entity.HasIndex(item => new { item.TenantId, item.ProfessionalId, item.StartsAt });
         entity.HasIndex(item => new { item.TenantId, item.PatientId, item.StartsAt });
         entity.HasIndex(item => new { item.TenantId, item.ClinicUnitId, item.StartsAt });
+        entity.HasIndex(item => new { item.TenantId, item.Status, item.StartsAt });
         entity.HasOne<Patient>()
             .WithMany()
             .HasForeignKey(item => new { item.TenantId, item.PatientId })
@@ -254,7 +259,21 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
             .HasForeignKey(item => new { item.TenantId, item.ClinicUnitId })
             .HasPrincipalKey(item => new { item.TenantId, item.Id })
             .OnDelete(DeleteBehavior.Restrict);
+        ConfigureAppointmentActor(entity, nameof(Appointment.CreatedByMembershipId));
+        ConfigureAppointmentActor(entity, nameof(Appointment.UpdatedByMembershipId));
+        ConfigureAppointmentActor(entity, nameof(Appointment.CompletedByMembershipId));
+        ConfigureAppointmentActor(entity, nameof(Appointment.NoShowByMembershipId));
+        ConfigureAppointmentActor(entity, nameof(Appointment.CancelledByMembershipId));
     }
+
+    private static void ConfigureAppointmentActor(
+        Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<Appointment> entity,
+        string actorPropertyName) =>
+        entity.HasOne<TenantMembership>()
+            .WithMany()
+            .HasForeignKey(nameof(Appointment.TenantId), actorPropertyName)
+            .HasPrincipalKey(nameof(TenantMembership.TenantId), nameof(TenantMembership.Id))
+            .OnDelete(DeleteBehavior.Restrict);
 
     private static void ConfigureClinicalRecord(ModelBuilder modelBuilder)
     {

@@ -65,7 +65,7 @@ public sealed record PatientProfessionalOption(
     string Specialty,
     IReadOnlyList<Guid> ClinicUnitIds);
 
-public sealed record PatientClinicUnitOption(Guid Id, string Name);
+public sealed record PatientClinicUnitOption(Guid Id, string Name, string TimeZoneId);
 
 public sealed record PatientListItem(
     Guid Id,

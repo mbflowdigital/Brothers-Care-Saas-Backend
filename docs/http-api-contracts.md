@@ -2,7 +2,7 @@
 
 ## Status e objetivo
 
-Este documento define a proposta de convenções HTTP do Brothers Care. Ele é a referência para a implementação da API e a substituição dos mocks do frontend, mas não afirma que as rotas abaixo já existem.
+Este documento define as convenções HTTP do Brothers Care e registra contratos implementados e planejados. O OpenAPI publicado é a fonte executável para confirmar quais rotas estão disponíveis.
 
 Todo endpoint implementado deve constar no documento OpenAPI gerado pela aplicação. O OpenAPI publicado é a fonte executável do contrato; este documento explica as decisões transversais que devem permanecer estáveis entre versões.
 
@@ -56,7 +56,7 @@ Superadministradores Brothers não recebem acesso clínico por possuírem acesso
 | Pacientes | `GET/POST /patients`, `GET/PATCH /patients/{patientId}`, `POST /patients/{patientId}/inactivation` | O payload não contém tenant. |
 | Profissionais | `GET/POST /professionals`, `GET/PATCH /professionals/{professionalId}`, `POST /professionals/{professionalId}/inactivation` | Vínculo com usuário terá contrato próprio. |
 | Vínculos de cuidado | `GET/POST /care-assignments`, `POST /care-assignments/{assignmentId}/end` | Controla acesso clínico do profissional. |
-| Atendimentos | `GET/POST /appointments`, `GET/PATCH /appointments/{appointmentId}`, `POST /appointments/{appointmentId}/complete`, `POST /appointments/{appointmentId}/no-show`, `POST /appointments/{appointmentId}/cancel` | Reagendamento ocorre por `PATCH` em atendimento agendado. |
+| Atendimentos | `GET /appointments/options`, `GET/POST /appointments`, `GET/PATCH /appointments/{appointmentId}`, `POST /appointments/{appointmentId}/complete`, `POST /appointments/{appointmentId}/no-show`, `POST /appointments/{appointmentId}/cancel` | `GET /appointments` exige `from` e `to` inclusivos, limita o período a 93 dias e aceita `status`. Profissionais recebem somente os próprios agendamentos, mesmo que tentem filtrar outro profissional; administradores da clínica recebem agendamentos do tenant ativo e podem filtrar por `professionalId` e `clinicUnitId`. A resposta inclui o identificador e nome do profissional, paciente, unidade e fuso horário. Datas devem conter offset; a interface calcula os limites no fuso da unidade selecionada. `POST /appointments` cria com `201` e `Location`; paciente e unidade fora do escopo retornam `403`, perfil ausente `404`, conflito de horário `409` e início passado `422`. As opções de criação retornam somente pacientes ativos vinculados ao profissional autenticado e unidades ativas vinculadas à sua membership. Reagendamento ocorre por `PATCH` em atendimento agendado. |
 | Evoluções | `GET/POST /clinical-records`, `GET /clinical-records/{clinicalRecordId}`, `PATCH /clinical-records/{clinicalRecordId}`, `POST /clinical-records/{clinicalRecordId}/finalize` | Retificações recebem rota própria após o modelo ser aprovado. |
 | Dashboard | `GET /dashboard/summary` | Retorna apenas indicadores autorizados. |
 | Auditoria | `GET /audit-events` | Sem conteúdo clínico no evento. |
