@@ -73,6 +73,102 @@ public static class SchedulingEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
+        endpoints.MapPost("/api/v1/appointments/{appointmentId:guid}/cancel", CancelAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("CancelAppointment")
+            .WithSummary("Cancela um atendimento agendado do profissional autenticado.")
+            .WithDescription("Exige um motivo e preserva o registro do atendimento cancelado.")
+            .Produces<AppointmentItem>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        endpoints.MapPost("/api/v1/appointments/{appointmentId:guid}/complete", CompleteAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("CompleteAppointment")
+            .WithSummary("Marca um atendimento iniciado como realizado.")
+            .WithDescription("Somente o profissional responsável pode concluir um atendimento após o horário de início.")
+            .Produces<AppointmentItem>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        endpoints.MapPost("/api/v1/appointments/{appointmentId:guid}/no-show", MarkNoShowAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("MarkAppointmentNoShow")
+            .WithSummary("Marca falta em um atendimento iniciado.")
+            .WithDescription("Exige um motivo e somente o profissional responsável pode marcar a falta após o horário de início.")
+            .Produces<AppointmentItem>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        endpoints.MapGet("/api/v1/professionals/{professionalId:guid}/availability", GetProfessionalAvailabilityAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("GetProfessionalAvailability")
+            .WithSummary("Consulta a jornada semanal e os bloqueios de um profissional.")
+            .WithDescription("A jornada é específica da unidade e interpretada no fuso local dela. Bloqueios e férias valem para todas as unidades. Profissionais consultam a própria disponibilidade; administradores da clínica podem consultar profissionais do tenant ativo.")
+            .Produces<ProfessionalAvailabilityData>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        endpoints.MapPut("/api/v1/professionals/{professionalId:guid}/availability/weekly", SetProfessionalWeeklyAvailabilityAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("SetProfessionalWeeklyAvailability")
+            .WithSummary("Substitui a jornada semanal de um profissional em uma unidade.")
+            .WithDescription("Envie todas as janelas semanais desejadas; uma lista vazia remove a configuração. Intervalos adjacentes são permitidos, mas sobreposições no mesmo dia não.")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        endpoints.MapGet("/api/v1/professionals/{professionalId:guid}/availability/blocks/{blockId:guid}", GetProfessionalAvailabilityBlockAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("GetProfessionalAvailabilityBlock")
+            .WithSummary("Consulta um bloqueio ou período de férias.")
+            .Produces<ProfessionalAvailabilityBlockItem>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        endpoints.MapPost("/api/v1/professionals/{professionalId:guid}/availability/blocks", CreateProfessionalAvailabilityBlockAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("CreateProfessionalAvailabilityBlock")
+            .WithSummary("Cria um bloqueio ou período de férias para todas as unidades do profissional.")
+            .WithDescription("As datas devem incluir offset. A criação é recusada se houver agendamento Scheduled sobreposto.")
+            .Produces<ProfessionalAvailabilityBlockItem>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        endpoints.MapDelete("/api/v1/professionals/{professionalId:guid}/availability/blocks/{blockId:guid}", DeleteProfessionalAvailabilityBlockAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("DeleteProfessionalAvailabilityBlock")
+            .WithSummary("Remove um bloqueio ou período de férias.")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         return endpoints;
     }
 
@@ -133,6 +229,139 @@ public static class SchedulingEndpoints
             _ => throw new InvalidOperationException($"Unsupported appointment query status: {result.Status}."),
         };
     }
+
+    private static async Task<Results<Ok<ProfessionalAvailabilityData>, ProblemHttpResult>> GetProfessionalAvailabilityAsync(
+        Guid professionalId,
+        [FromQuery] Guid? clinicUnitId,
+        [FromQuery] DateTimeOffset? from,
+        [FromQuery] DateTimeOffset? through,
+        [FromServices] GetProfessionalAvailability getAvailability,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var query = context.Request.Query;
+        if (!HasValidAvailabilityQuery(query) || clinicUnitId is null ||
+            !RequiredOffsetDateTimeOffsetJsonConverter.TryParse(query["from"].ToString(), out var parsedFrom) ||
+            !RequiredOffsetDateTimeOffsetJsonConverter.TryParse(query["through"].ToString(), out var parsedThrough))
+        {
+            return AvailabilityProblem(context, ProfessionalAvailabilityStatus.InvalidInput);
+        }
+
+        var result = await getAvailability.ExecuteAsync(
+            professionalId, clinicUnitId.Value, parsedFrom, parsedThrough, cancellationToken);
+        return result.Status == ProfessionalAvailabilityStatus.Success && result.Availability is not null
+            ? TypedResults.Ok(result.Availability)
+            : AvailabilityProblem(context, result.Status);
+    }
+
+    private static async Task<Results<NoContent, ProblemHttpResult>> SetProfessionalWeeklyAvailabilityAsync(
+        Guid professionalId,
+        [FromBody] SetProfessionalWeeklyAvailabilityRequest? request,
+        [FromServices] SetProfessionalWeeklyAvailability setAvailability,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (request?.Windows is null)
+        {
+            return AvailabilityProblem(context, ProfessionalAvailabilityStatus.InvalidInput);
+        }
+
+        var command = new SetProfessionalWeeklyAvailabilityCommand(
+            professionalId,
+            request.ClinicUnitId,
+            request.Windows.Select(window => new ProfessionalAvailabilityWindowInput(
+                window.DayOfWeek,
+                window.StartsAt,
+                window.EndsAt)).ToArray());
+        var status = await setAvailability.ExecuteAsync(command, cancellationToken);
+        return status == ProfessionalAvailabilityStatus.Success
+            ? TypedResults.NoContent()
+            : AvailabilityProblem(context, status);
+    }
+
+    private static async Task<Results<Ok<ProfessionalAvailabilityBlockItem>, ProblemHttpResult>> GetProfessionalAvailabilityBlockAsync(
+        Guid professionalId,
+        Guid blockId,
+        [FromServices] GetProfessionalAvailabilityBlock getBlock,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var result = await getBlock.ExecuteAsync(professionalId, blockId, cancellationToken);
+        return result.Status == ProfessionalAvailabilityStatus.Success && result.Block is not null
+            ? TypedResults.Ok(result.Block)
+            : AvailabilityProblem(context, result.Status);
+    }
+
+    private static async Task<Results<Created<ProfessionalAvailabilityBlockItem>, ProblemHttpResult>> CreateProfessionalAvailabilityBlockAsync(
+        Guid professionalId,
+        [FromBody] CreateProfessionalAvailabilityBlockRequest? request,
+        [FromServices] CreateProfessionalAvailabilityBlock createBlock,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (request is null)
+        {
+            return AvailabilityProblem(context, ProfessionalAvailabilityStatus.InvalidInput);
+        }
+
+        var result = await createBlock.ExecuteAsync(
+            new CreateProfessionalAvailabilityBlockCommand(
+                professionalId, request.StartsAt, request.EndsAt, request.Kind, request.Reason),
+            cancellationToken);
+        if (result.Status != ProfessionalAvailabilityStatus.Success || result.Block is null)
+        {
+            return AvailabilityProblem(context, result.Status);
+        }
+
+        return TypedResults.Created(
+            $"/api/v1/professionals/{professionalId:D}/availability/blocks/{result.Block.Id:D}",
+            result.Block);
+    }
+
+    private static async Task<Results<NoContent, ProblemHttpResult>> DeleteProfessionalAvailabilityBlockAsync(
+        Guid professionalId,
+        Guid blockId,
+        [FromServices] DeleteProfessionalAvailabilityBlock deleteBlock,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var status = await deleteBlock.ExecuteAsync(professionalId, blockId, cancellationToken);
+        return status == ProfessionalAvailabilityStatus.Success
+            ? TypedResults.NoContent()
+            : AvailabilityProblem(context, status);
+    }
+
+    private static ProblemHttpResult AvailabilityProblem(
+        HttpContext context,
+        ProfessionalAvailabilityStatus status) =>
+        status switch
+        {
+            ProfessionalAvailabilityStatus.Unauthenticated => AuthenticationProblems.Create(
+                context, StatusCodes.Status401Unauthorized, "Sessão ausente, inválida ou expirada.",
+                "authentication-required"),
+            ProfessionalAvailabilityStatus.Forbidden or
+                ProfessionalAvailabilityStatus.ClinicUnitUnavailable => AuthenticationProblems.Create(
+                context, StatusCodes.Status403Forbidden, "A disponibilidade solicitada não está disponível nesta empresa.",
+                "forbidden"),
+            ProfessionalAvailabilityStatus.ProfessionalNotFound or
+                ProfessionalAvailabilityStatus.BlockNotFound => AuthenticationProblems.Create(
+                context, StatusCodes.Status404NotFound, "Profissional ou bloqueio não encontrado nesta empresa.",
+                "availability-not-found"),
+            ProfessionalAvailabilityStatus.ScheduledAppointmentConflict => AuthenticationProblems.Create(
+                context, StatusCodes.Status409Conflict,
+                "Não é possível bloquear o período porque há agendamentos ativos no intervalo.",
+                "scheduled-appointment-conflict"),
+            ProfessionalAvailabilityStatus.InvalidInput => AuthenticationProblems.Create(
+                context, StatusCodes.Status400BadRequest,
+                "Informe unidade, período e janelas válidas sem sobreposição.",
+                "validation"),
+            _ => throw new InvalidOperationException($"Unsupported availability status: {status}."),
+        };
 
     private static async Task<Results<Ok<AppointmentScheduleItem>, ProblemHttpResult>> GetAppointmentAsync(
         Guid appointmentId,
@@ -222,6 +451,11 @@ public static class SchedulingEndpoints
                 StatusCodes.Status422UnprocessableEntity,
                 "O horário inicial precisa estar no presente ou no futuro.",
                 "business-rule"),
+            CreateAppointmentStatus.ProfessionalUnavailable => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status422UnprocessableEntity,
+                "O profissional não está disponível neste período.",
+                "professional-unavailable"),
             CreateAppointmentStatus.ProfessionalConflict or
                 CreateAppointmentStatus.PatientConflict => AuthenticationProblems.Create(
                 context,
@@ -290,6 +524,11 @@ public static class SchedulingEndpoints
                 StatusCodes.Status422UnprocessableEntity,
                 "O novo horário inicial precisa estar no presente ou no futuro.",
                 "business-rule"),
+            RescheduleAppointmentStatus.ProfessionalUnavailable => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status422UnprocessableEntity,
+                "O profissional não está disponível neste período.",
+                "professional-unavailable"),
             RescheduleAppointmentStatus.ProfessionalConflict or
                 RescheduleAppointmentStatus.PatientConflict => AuthenticationProblems.Create(
                     context,
@@ -302,6 +541,111 @@ public static class SchedulingEndpoints
                 "Informe unidade e um novo intervalo de horário válido.",
                 "validation"),
             _ => throw new InvalidOperationException($"Unsupported appointment reschedule status: {result.Status}."),
+        };
+    }
+
+    private static async Task<Results<Ok<AppointmentItem>, ProblemHttpResult>> CancelAsync(
+        Guid appointmentId,
+        [FromBody] CancelAppointmentRequest? request,
+        [FromServices] CancelAppointment cancelAppointment,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var result = await cancelAppointment.ExecuteAsync(
+            new CancelAppointmentCommand(appointmentId, request?.Reason),
+            cancellationToken);
+
+        if (result.Status == CancelAppointmentStatus.Success)
+        {
+            return TypedResults.Ok(result.Appointment
+                ?? throw new InvalidOperationException("A successful cancellation result must contain an appointment."));
+        }
+
+        return result.Status switch
+        {
+            CancelAppointmentStatus.Unauthenticated => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status401Unauthorized,
+                "Sessão ausente, inválida ou expirada.",
+                "authentication-required"),
+            CancelAppointmentStatus.Forbidden => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status403Forbidden,
+                "O agendamento não está disponível para este profissional.",
+                "forbidden"),
+            CancelAppointmentStatus.ProfessionalNotFound or
+                CancelAppointmentStatus.NotFound => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status404NotFound,
+                "Agendamento não encontrado.",
+                "appointment-not-found"),
+            CancelAppointmentStatus.NotScheduled => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status409Conflict,
+                "Somente atendimentos agendados podem ser cancelados.",
+                "invalid-appointment-status"),
+            CancelAppointmentStatus.InvalidInput => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status400BadRequest,
+                "Informe um motivo de cancelamento com até 500 caracteres.",
+                "validation"),
+            _ => throw new InvalidOperationException($"Unsupported appointment cancellation status: {result.Status}."),
+        };
+    }
+
+    private static async Task<Results<Ok<AppointmentItem>, ProblemHttpResult>> CompleteAsync(
+        Guid appointmentId,
+        [FromServices] CompleteAppointment completeAppointment,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var result = await completeAppointment.ExecuteAsync(
+            new CompleteAppointmentCommand(appointmentId), cancellationToken);
+        if (result.Status == CompleteAppointmentStatus.Success)
+        {
+            return TypedResults.Ok(result.Appointment
+                ?? throw new InvalidOperationException("A successful completion result must contain an appointment."));
+        }
+
+        return result.Status switch
+        {
+            CompleteAppointmentStatus.Unauthenticated => AuthenticationProblems.Create(context, StatusCodes.Status401Unauthorized, "Sessão ausente, inválida ou expirada.", "authentication-required"),
+            CompleteAppointmentStatus.Forbidden => AuthenticationProblems.Create(context, StatusCodes.Status403Forbidden, "O agendamento não está disponível para este profissional.", "forbidden"),
+            CompleteAppointmentStatus.ProfessionalNotFound or CompleteAppointmentStatus.NotFound => AuthenticationProblems.Create(context, StatusCodes.Status404NotFound, "Agendamento não encontrado.", "appointment-not-found"),
+            CompleteAppointmentStatus.NotScheduled => AuthenticationProblems.Create(context, StatusCodes.Status409Conflict, "Somente atendimentos agendados podem ser marcados como realizados.", "invalid-appointment-status"),
+            CompleteAppointmentStatus.NotStarted => AuthenticationProblems.Create(context, StatusCodes.Status409Conflict, "O atendimento só pode ser marcado como realizado após o horário de início.", "appointment-not-started"),
+            CompleteAppointmentStatus.InvalidInput => AuthenticationProblems.Create(context, StatusCodes.Status400BadRequest, "Informe um agendamento válido.", "validation"),
+            _ => throw new InvalidOperationException($"Unsupported appointment completion status: {result.Status}."),
+        };
+    }
+
+    private static async Task<Results<Ok<AppointmentItem>, ProblemHttpResult>> MarkNoShowAsync(
+        Guid appointmentId,
+        [FromBody] MarkAppointmentNoShowRequest? request,
+        [FromServices] MarkAppointmentNoShow markAppointmentNoShow,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var result = await markAppointmentNoShow.ExecuteAsync(
+            new MarkAppointmentNoShowCommand(appointmentId, request?.Reason), cancellationToken);
+        if (result.Status == MarkAppointmentNoShowStatus.Success)
+        {
+            return TypedResults.Ok(result.Appointment
+                ?? throw new InvalidOperationException("A successful no-show result must contain an appointment."));
+        }
+
+        return result.Status switch
+        {
+            MarkAppointmentNoShowStatus.Unauthenticated => AuthenticationProblems.Create(context, StatusCodes.Status401Unauthorized, "Sessão ausente, inválida ou expirada.", "authentication-required"),
+            MarkAppointmentNoShowStatus.Forbidden => AuthenticationProblems.Create(context, StatusCodes.Status403Forbidden, "O agendamento não está disponível para este profissional.", "forbidden"),
+            MarkAppointmentNoShowStatus.ProfessionalNotFound or MarkAppointmentNoShowStatus.NotFound => AuthenticationProblems.Create(context, StatusCodes.Status404NotFound, "Agendamento não encontrado.", "appointment-not-found"),
+            MarkAppointmentNoShowStatus.NotScheduled => AuthenticationProblems.Create(context, StatusCodes.Status409Conflict, "Somente atendimentos agendados podem ser marcados como falta.", "invalid-appointment-status"),
+            MarkAppointmentNoShowStatus.NotStarted => AuthenticationProblems.Create(context, StatusCodes.Status409Conflict, "A falta só pode ser registrada após o horário de início.", "appointment-not-started"),
+            MarkAppointmentNoShowStatus.InvalidInput => AuthenticationProblems.Create(context, StatusCodes.Status400BadRequest, "Informe um motivo de falta com até 500 caracteres.", "validation"),
+            _ => throw new InvalidOperationException($"Unsupported no-show status: {result.Status}."),
         };
     }
 
@@ -350,6 +694,15 @@ public static class SchedulingEndpoints
         query["professionalId"].Count <= 1 &&
         query["clinicUnitId"].Count <= 1;
 
+    private static bool HasValidAvailabilityQuery(IQueryCollection query) =>
+        query.Keys.All(key =>
+            key.Equals("clinicUnitId", StringComparison.OrdinalIgnoreCase) ||
+            key.Equals("from", StringComparison.OrdinalIgnoreCase) ||
+            key.Equals("through", StringComparison.OrdinalIgnoreCase)) &&
+        query["clinicUnitId"].Count == 1 &&
+        query["from"].Count == 1 &&
+        query["through"].Count == 1;
+
 }
 
 /// <summary>Dados para agendar um atendimento sem informar tenant ou profissional.</summary>
@@ -371,6 +724,36 @@ public sealed record RescheduleAppointmentRequest(
     DateTimeOffset StartsAt,
     [property: JsonConverter(typeof(RequiredOffsetDateTimeOffsetJsonConverter))]
     DateTimeOffset EndsAt);
+
+/// <summary>Motivo obrigatório para cancelar um atendimento agendado.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CancelAppointmentRequest(string? Reason);
+
+/// <summary>Motivo obrigatório para registrar a falta do paciente.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record MarkAppointmentNoShowRequest(string? Reason);
+
+/// <summary>Janelas completas de jornada semanal para uma unidade.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record SetProfessionalWeeklyAvailabilityRequest(
+    Guid ClinicUnitId,
+    IReadOnlyList<SetProfessionalWeeklyAvailabilityWindowRequest>? Windows);
+
+/// <summary>Uma janela semanal. DayOfWeek usa 0 para domingo e 6 para sábado.</summary>
+public sealed record SetProfessionalWeeklyAvailabilityWindowRequest(
+    DayOfWeek DayOfWeek,
+    TimeOnly StartsAt,
+    TimeOnly EndsAt);
+
+/// <summary>Período pontual de bloqueio ou férias com offset explícito.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CreateProfessionalAvailabilityBlockRequest(
+    [property: JsonConverter(typeof(RequiredOffsetDateTimeOffsetJsonConverter))]
+    DateTimeOffset StartsAt,
+    [property: JsonConverter(typeof(RequiredOffsetDateTimeOffsetJsonConverter))]
+    DateTimeOffset EndsAt,
+    string Kind,
+    string? Reason);
 
 public sealed class RequiredOffsetDateTimeOffsetJsonConverter : JsonConverter<DateTimeOffset>
 {

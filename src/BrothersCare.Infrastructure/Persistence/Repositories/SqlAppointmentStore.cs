@@ -71,6 +71,44 @@ public sealed class SqlAppointmentStore(BrothersCareDbContext dbContext) : IAppo
                  professional.DefaultAppointmentDurationMinutes))
             .SingleOrDefaultAsync(cancellationToken);
 
+        public Task<SchedulingProfessional?> FindActiveProfessionalByIdAsync(
+            Guid tenantId,
+            Guid professionalId,
+            CancellationToken cancellationToken) =>
+            (from professional in context.Professionals.AsNoTracking()
+             join membership in context.TenantMemberships.AsNoTracking()
+                 on new { professional.TenantId, MembershipId = professional.TenantMembershipId }
+                 equals new { membership.TenantId, MembershipId = (Guid?)membership.Id }
+             join tenant in context.Tenants.AsNoTracking() on membership.TenantId equals tenant.Id
+             where professional.TenantId == tenantId && professional.Id == professionalId &&
+                 professional.Status == ProfessionalStatus.Active &&
+                 membership.Status == MembershipStatus.Active && tenant.Status == TenantStatus.Active
+             select new SchedulingProfessional(
+                 professional.Id,
+                 membership.Id,
+                 professional.DefaultAppointmentDurationMinutes))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        public Task<bool> IsActiveProfessionalUnitLinkedAsync(
+            Guid tenantId,
+            Guid professionalId,
+            Guid clinicUnitId,
+            CancellationToken cancellationToken) =>
+            (from professional in context.Professionals.AsNoTracking()
+             join membership in context.TenantMemberships.AsNoTracking()
+                 on new { professional.TenantId, MembershipId = professional.TenantMembershipId }
+                 equals new { membership.TenantId, MembershipId = (Guid?)membership.Id }
+             join link in context.ClinicUnitMemberships.AsNoTracking()
+                 on new { membership.TenantId, MembershipId = membership.Id }
+                 equals new { link.TenantId, MembershipId = link.TenantMembershipId }
+             join unit in context.ClinicUnits.AsNoTracking()
+                 on new { link.TenantId, ClinicUnitId = link.ClinicUnitId }
+                 equals new { unit.TenantId, ClinicUnitId = unit.Id }
+             where professional.TenantId == tenantId && professional.Id == professionalId &&
+                 professional.Status == ProfessionalStatus.Active && membership.Status == MembershipStatus.Active &&
+                 unit.Id == clinicUnitId && unit.IsActive
+             select link.Id).AnyAsync(cancellationToken);
+
         public Task<bool> IsActiveUnitLinkedAsync(
             Guid tenantId,
             Guid membershipId,
@@ -98,6 +136,134 @@ public sealed class SqlAppointmentStore(BrothersCareDbContext dbContext) : IAppo
                  patient.Status == PatientStatus.Active
              select assignment.Id).AnyAsync(cancellationToken);
 
+        public async Task<bool> IsProfessionalAvailableAsync(
+            Guid tenantId,
+            Guid professionalId,
+            Guid clinicUnitId,
+            DateTimeOffset startsAt,
+            DateTimeOffset endsAt,
+            CancellationToken cancellationToken)
+        {
+            var timeZoneId = await context.ClinicUnits.AsNoTracking()
+                .Where(item => item.TenantId == tenantId && item.Id == clinicUnitId && item.IsActive)
+                .Select(item => item.TimeZoneId)
+                .SingleOrDefaultAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(timeZoneId))
+            {
+                return false;
+            }
+
+            var hasBlock = await context.ProfessionalAvailabilityBlocks.AsNoTracking().AnyAsync(item =>
+                item.TenantId == tenantId && item.ProfessionalId == professionalId &&
+                item.StartsAt < endsAt && item.EndsAt > startsAt, cancellationToken);
+            if (hasBlock)
+            {
+                return false;
+            }
+
+            var windows = await context.ProfessionalAvailabilityWindows.AsNoTracking()
+                .Where(item => item.TenantId == tenantId && item.ProfessionalId == professionalId &&
+                    item.ClinicUnitId == clinicUnitId)
+                .Select(item => new AvailabilityWindow(item.DayOfWeek, item.StartsAt, item.EndsAt))
+                .ToArrayAsync(cancellationToken);
+
+            // Sem expediente configurado, preservamos temporariamente a disponibilidade livre dos perfis existentes.
+            if (windows.Length == 0)
+            {
+                return true;
+            }
+
+            TimeZoneInfo timeZone;
+            try
+            {
+                timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                return false;
+            }
+            catch (InvalidTimeZoneException)
+            {
+                return false;
+            }
+
+            var localStart = TimeZoneInfo.ConvertTime(startsAt, timeZone);
+            var localEnd = TimeZoneInfo.ConvertTime(endsAt, timeZone);
+            if (localStart.Date != localEnd.Date)
+            {
+                return false;
+            }
+
+            var startTime = TimeOnly.FromDateTime(localStart.DateTime);
+            var endTime = TimeOnly.FromDateTime(localEnd.DateTime);
+            return windows.Any(item => item.DayOfWeek == localStart.DayOfWeek &&
+                item.StartsAt <= startTime && item.EndsAt >= endTime);
+        }
+
+        public async Task<IReadOnlyList<ProfessionalAvailabilityWindow>> ListAvailabilityWindowsAsync(
+            Guid tenantId,
+            Guid professionalId,
+            Guid clinicUnitId,
+            CancellationToken cancellationToken) =>
+            await context.ProfessionalAvailabilityWindows.AsNoTracking()
+                .Where(item => item.TenantId == tenantId && item.ProfessionalId == professionalId &&
+                    item.ClinicUnitId == clinicUnitId)
+                .OrderBy(item => item.DayOfWeek).ThenBy(item => item.StartsAt).ThenBy(item => item.Id)
+                .ToArrayAsync(cancellationToken);
+
+        public async Task ReplaceAvailabilityWindowsAsync(
+            Guid tenantId,
+            Guid professionalId,
+            Guid clinicUnitId,
+            IReadOnlyList<ProfessionalAvailabilityWindow> windows,
+            CancellationToken cancellationToken)
+        {
+            var current = await context.ProfessionalAvailabilityWindows.Where(item =>
+                    item.TenantId == tenantId && item.ProfessionalId == professionalId &&
+                    item.ClinicUnitId == clinicUnitId)
+                .ToArrayAsync(cancellationToken);
+            context.ProfessionalAvailabilityWindows.RemoveRange(current);
+            context.ProfessionalAvailabilityWindows.AddRange(windows);
+        }
+
+        public Task<bool> HasScheduledAppointmentOverlapAsync(
+            Guid tenantId,
+            Guid professionalId,
+            DateTimeOffset startsAt,
+            DateTimeOffset endsAt,
+            CancellationToken cancellationToken) =>
+            context.Appointments.AsNoTracking().AnyAsync(item =>
+                item.TenantId == tenantId && item.ProfessionalId == professionalId &&
+                item.Status == AppointmentStatus.Scheduled &&
+                item.StartsAt < endsAt && item.EndsAt > startsAt, cancellationToken);
+
+        public async Task<IReadOnlyList<ProfessionalAvailabilityBlock>> ListAvailabilityBlocksAsync(
+            Guid tenantId,
+            Guid professionalId,
+            DateTimeOffset from,
+            DateTimeOffset to,
+            CancellationToken cancellationToken) =>
+            await context.ProfessionalAvailabilityBlocks.AsNoTracking().Where(item =>
+                    item.TenantId == tenantId && item.ProfessionalId == professionalId &&
+                    item.StartsAt < to && item.EndsAt > from)
+                .OrderBy(item => item.StartsAt).ThenBy(item => item.Id)
+                .ToArrayAsync(cancellationToken);
+
+        public Task<ProfessionalAvailabilityBlock?> FindAvailabilityBlockAsync(
+            Guid tenantId,
+            Guid professionalId,
+            Guid blockId,
+            CancellationToken cancellationToken) =>
+            context.ProfessionalAvailabilityBlocks.SingleOrDefaultAsync(item =>
+                item.TenantId == tenantId && item.ProfessionalId == professionalId && item.Id == blockId,
+                cancellationToken);
+
+        public void AddAvailabilityBlock(ProfessionalAvailabilityBlock block) =>
+            context.ProfessionalAvailabilityBlocks.Add(block);
+
+        public void RemoveAvailabilityBlock(ProfessionalAvailabilityBlock block) =>
+            context.ProfessionalAvailabilityBlocks.Remove(block);
+
         public async Task<IReadOnlyList<SchedulingPatientOption>> ListPatientOptionsAsync(
             Guid tenantId,
             Guid professionalId,
@@ -111,6 +277,8 @@ public sealed class SqlAppointmentStore(BrothersCareDbContext dbContext) : IAppo
                    orderby patient.FullName, patient.Id
                    select new SchedulingPatientOption(patient.Id, patient.FullName, patient.HealthPlan))
                 .ToListAsync(cancellationToken);
+
+        private sealed record AvailabilityWindow(DayOfWeek DayOfWeek, TimeOnly StartsAt, TimeOnly EndsAt);
 
         public async Task<IReadOnlyList<SchedulingClinicUnitOption>> ListClinicUnitOptionsAsync(
             Guid tenantId,

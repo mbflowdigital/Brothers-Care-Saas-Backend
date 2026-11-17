@@ -22,7 +22,7 @@ Em `Development`, a interface Swagger fica em `/swagger`. Os health checks são:
 - `GET /health/live`: confirma que o processo HTTP está ativo;
 - `GET /health/ready`: executará verificações de dependências marcadas com a tag `ready` quando elas existirem.
 
-As rotas funcionais de identidade, tenancy, pacientes e agenda são publicadas no OpenAPI. A agenda inclui opções e criação para profissionais e consultas por período; a visão de agenda para administradores é limitada ao tenant ativo.
+As rotas funcionais de identidade, tenancy, pacientes e agenda são publicadas no OpenAPI. A agenda inclui opções, criação e consultas por período; disponibilidade semanal por unidade e bloqueios globais também podem ser gerenciados por profissionais e administradores da clínica. A autorização é validada no servidor e limitada ao profissional ou tenant ativo.
 
 ## Configuração local
 
@@ -42,6 +42,8 @@ $env:ConnectionStrings__BrothersCare = "Server=localhost;Database=BrothersCare;T
 ```
 
 O provider SQL Server e o `DbContext` ficam em Infrastructure. Não há credenciais de banco versionadas.
+
+A migration `AddProfessionalAvailability` cria as tabelas de jornada semanal e bloqueios. A geração não a aplica automaticamente; revise e aplique por processo operacional explícito.
 
 ## Migrações
 

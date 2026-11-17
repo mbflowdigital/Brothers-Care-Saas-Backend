@@ -64,6 +64,49 @@ internal static class SchedulingAccess
                 new SchedulingAgendaScope(membership.TenantId, professional.Id, IsClinicAdministrator: false));
     }
 
+    public static async Task<SchedulingAvailabilityAccessResult> ResolveAvailabilityManagerAsync(
+        CurrentPrincipal? principal,
+        Guid targetProfessionalId,
+        IAppointmentTransaction transaction,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var membership = await ResolveActiveMembershipAsync(
+            principal, transaction, timeProvider, cancellationToken);
+        if (membership.Status != SchedulingAccessStatus.Success)
+        {
+            return new(membership.Status);
+        }
+
+        SchedulingProfessional? professional;
+        if (membership.Role == TenantMembershipRole.ClinicAdministrator)
+        {
+            professional = await transaction.FindActiveProfessionalByIdAsync(
+                membership.TenantId, targetProfessionalId, cancellationToken);
+        }
+        else if (membership.Role == TenantMembershipRole.Professional)
+        {
+            professional = await transaction.FindActiveProfessionalAsync(
+                membership.TenantId, principal!.UserId, membership.MembershipId, cancellationToken);
+            if (professional is not null && professional.Id != targetProfessionalId)
+            {
+                return new(SchedulingAccessStatus.Forbidden);
+            }
+        }
+        else
+        {
+            return new(SchedulingAccessStatus.Forbidden);
+        }
+
+        return professional is null
+            ? new(SchedulingAccessStatus.ProfessionalNotFound)
+            : new(SchedulingAccessStatus.Success, new(
+                membership.TenantId,
+                membership.MembershipId,
+                professional,
+                membership.Role == TenantMembershipRole.ClinicAdministrator));
+    }
+
     private static async Task<SchedulingMembershipResult> ResolveActiveMembershipAsync(
         CurrentPrincipal? principal,
         IAppointmentTransaction transaction,
@@ -122,6 +165,16 @@ internal sealed record SchedulingAgendaScope(
 internal sealed record SchedulingAgendaAccessResult(
     SchedulingAccessStatus Status,
     SchedulingAgendaScope? Scope = null);
+
+internal sealed record SchedulingAvailabilityScope(
+    Guid TenantId,
+    Guid ActorMembershipId,
+    SchedulingProfessional Professional,
+    bool IsClinicAdministrator);
+
+internal sealed record SchedulingAvailabilityAccessResult(
+    SchedulingAccessStatus Status,
+    SchedulingAvailabilityScope? Scope = null);
 
 internal sealed record SchedulingMembershipResult(
     SchedulingAccessStatus Status,

@@ -3,6 +3,9 @@
 @clinicAdminSessionCookie = replace-with-clinic-administrator-session-cookie
 @csrfToken = replace-with-csrf-token
 @appointmentId = 3fa85f64-5717-4562-b3fc-2c963f66afa6
+@professionalId = 5fa85f64-5717-4562-b3fc-2c963f66afa6
+@clinicUnitId = 4fa85f64-5717-4562-b3fc-2c963f66afa6
+@availabilityBlockId = 6fa85f64-5717-4562-b3fc-2c963f66afa6
 
 GET {{BrothersCare_Api_HostAddress}}/health/live
 Accept: application/json
@@ -50,3 +53,56 @@ X-CSRF-Token: {{csrfToken}}
   "endsAt": "2026-11-18T10:00:00-03:00",
   "notes": "Retorno de acompanhamento"
 }
+
+###
+
+### Consultar disponibilidade (profissional ou administrador da clínica)
+GET {{BrothersCare_Api_HostAddress}}/api/v1/professionals/{{professionalId}}/availability?clinicUnitId={{clinicUnitId}}&from=2026-11-18T00:00:00-03:00&through=2027-11-18T00:00:00-03:00
+Accept: application/json
+Cookie: bc_session={{clinicAdminSessionCookie}}
+
+###
+
+### Substituir a jornada semanal da unidade selecionada
+PUT {{BrothersCare_Api_HostAddress}}/api/v1/professionals/{{professionalId}}/availability/weekly
+Content-Type: application/json
+Cookie: bc_session={{clinicAdminSessionCookie}}
+X-CSRF-Token: {{csrfToken}}
+
+{
+  "clinicUnitId": "{{clinicUnitId}}",
+  "windows": [
+    { "dayOfWeek": 1, "startsAt": "09:00:00", "endsAt": "12:00:00" },
+    { "dayOfWeek": 1, "startsAt": "13:00:00", "endsAt": "17:00:00" },
+    { "dayOfWeek": 2, "startsAt": "09:00:00", "endsAt": "17:00:00" }
+  ]
+}
+
+###
+
+### Criar bloqueio global para o profissional
+POST {{BrothersCare_Api_HostAddress}}/api/v1/professionals/{{professionalId}}/availability/blocks
+Content-Type: application/json
+Cookie: bc_session={{clinicAdminSessionCookie}}
+X-CSRF-Token: {{csrfToken}}
+
+{
+  "startsAt": "2026-12-24T09:00:00-03:00",
+  "endsAt": "2026-12-26T18:00:00-03:00",
+  "kind": "Vacation",
+  "reason": "Recesso"
+}
+
+###
+
+### Consultar um bloqueio
+GET {{BrothersCare_Api_HostAddress}}/api/v1/professionals/{{professionalId}}/availability/blocks/{{availabilityBlockId}}
+Accept: application/json
+Cookie: bc_session={{clinicAdminSessionCookie}}
+
+###
+
+### Remover um bloqueio
+DELETE {{BrothersCare_Api_HostAddress}}/api/v1/professionals/{{professionalId}}/availability/blocks/{{availabilityBlockId}}
+Cookie: bc_session={{clinicAdminSessionCookie}}
+X-CSRF-Token: {{csrfToken}}

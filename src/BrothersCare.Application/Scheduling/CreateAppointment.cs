@@ -57,6 +57,12 @@ public sealed class CreateAppointment(
             return new(CreateAppointmentStatus.StartsInPast);
         }
 
+        if (!await transaction.IsProfessionalAvailableAsync(
+                tenantId, professional.Id, command.ClinicUnitId, command.StartsAt, command.EndsAt, cancellationToken))
+        {
+            return new(CreateAppointmentStatus.ProfessionalUnavailable);
+        }
+
         var conflicts = await transaction.FindConflictsAsync(
             tenantId,
             professional.Id,
@@ -131,6 +137,7 @@ public enum CreateAppointmentStatus
     StartsInPast = 8,
     ProfessionalConflict = 9,
     PatientConflict = 10,
+    ProfessionalUnavailable = 11,
 }
 
 /// <summary>Representa um atendimento agendado retornado pela aplicação.</summary>

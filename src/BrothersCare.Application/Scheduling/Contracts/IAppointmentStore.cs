@@ -27,6 +27,17 @@ public interface IAppointmentTransaction : IAsyncDisposable
         Guid membershipId,
         CancellationToken cancellationToken);
 
+    Task<SchedulingProfessional?> FindActiveProfessionalByIdAsync(
+        Guid tenantId,
+        Guid professionalId,
+        CancellationToken cancellationToken);
+
+    Task<bool> IsActiveProfessionalUnitLinkedAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid clinicUnitId,
+        CancellationToken cancellationToken);
+
     Task<bool> IsActiveUnitLinkedAsync(
         Guid tenantId,
         Guid membershipId,
@@ -38,6 +49,51 @@ public interface IAppointmentTransaction : IAsyncDisposable
         Guid professionalId,
         Guid patientId,
         CancellationToken cancellationToken);
+
+    Task<bool> IsProfessionalAvailableAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid clinicUnitId,
+        DateTimeOffset startsAt,
+        DateTimeOffset endsAt,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ProfessionalAvailabilityWindow>> ListAvailabilityWindowsAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid clinicUnitId,
+        CancellationToken cancellationToken);
+
+    Task ReplaceAvailabilityWindowsAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid clinicUnitId,
+        IReadOnlyList<ProfessionalAvailabilityWindow> windows,
+        CancellationToken cancellationToken);
+
+    Task<bool> HasScheduledAppointmentOverlapAsync(
+        Guid tenantId,
+        Guid professionalId,
+        DateTimeOffset startsAt,
+        DateTimeOffset endsAt,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ProfessionalAvailabilityBlock>> ListAvailabilityBlocksAsync(
+        Guid tenantId,
+        Guid professionalId,
+        DateTimeOffset from,
+        DateTimeOffset through,
+        CancellationToken cancellationToken);
+
+    Task<ProfessionalAvailabilityBlock?> FindAvailabilityBlockAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid blockId,
+        CancellationToken cancellationToken);
+
+    void AddAvailabilityBlock(ProfessionalAvailabilityBlock block);
+
+    void RemoveAvailabilityBlock(ProfessionalAvailabilityBlock block);
 
     Task<IReadOnlyList<SchedulingPatientOption>> ListPatientOptionsAsync(
         Guid tenantId,
