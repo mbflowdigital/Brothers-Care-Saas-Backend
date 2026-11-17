@@ -185,14 +185,24 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
         Guid patientId,
         DateTimeOffset startsAt,
         DateTimeOffset endsAt,
+        Guid? excludedAppointmentId,
         CancellationToken cancellationToken)
     {
         var overlapping = Appointments.Where(item => item.TenantId == tenantId &&
+            (excludedAppointmentId is null || item.Id != excludedAppointmentId) &&
             item.Status == AppointmentStatus.Scheduled && item.StartsAt < endsAt && item.EndsAt > startsAt).ToArray();
         return Task.FromResult(new AppointmentConflicts(
             overlapping.Any(item => item.ProfessionalId == professionalId),
             overlapping.Any(item => item.PatientId == patientId)));
     }
+
+    public Task<Appointment?> FindAppointmentForUpdateAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid appointmentId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(Appointments.SingleOrDefault(item =>
+            item.TenantId == tenantId && item.ProfessionalId == professionalId && item.Id == appointmentId));
 
     public Task<IReadOnlyList<AppointmentScheduleItem>> ListAppointmentsAsync(
         Guid tenantId,
@@ -219,12 +229,14 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
 
     public Task<AppointmentScheduleItem?> FindAppointmentAsync(
         Guid tenantId,
-        Guid professionalId,
+        Guid? professionalId,
         Guid appointmentId,
         CancellationToken cancellationToken)
     {
         var appointment = Appointments.SingleOrDefault(item =>
-            item.TenantId == tenantId && item.ProfessionalId == professionalId && item.Id == appointmentId);
+            item.TenantId == tenantId &&
+            (professionalId is null || item.ProfessionalId == professionalId) &&
+            item.Id == appointmentId);
         return Task.FromResult(appointment is null ? null : ToScheduleItem(appointment));
     }
 

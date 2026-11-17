@@ -91,7 +91,7 @@ public sealed class GetAppointment(
         CancellationToken cancellationToken)
     {
         await using var transaction = await store.BeginAsync(cancellationToken);
-        var access = await SchedulingAccess.ResolveProfessionalAsync(
+        var access = await SchedulingAccess.ResolveAgendaViewerAsync(
             principalAccessor.Principal, transaction, timeProvider, cancellationToken);
         if (access.Status != SchedulingAccessStatus.Success)
         {
@@ -107,7 +107,7 @@ public sealed class GetAppointment(
         var scope = access.Scope
             ?? throw new InvalidOperationException("Successful scheduling access must include its scope.");
         var appointment = await transaction.FindAppointmentAsync(
-            scope.TenantId, scope.Professional.Id, appointmentId, cancellationToken);
+            scope.TenantId, scope.ProfessionalId, appointmentId, cancellationToken);
         return appointment is null
             ? new(AppointmentQueryStatus.NotFound)
             : new(AppointmentQueryStatus.Success, appointment);

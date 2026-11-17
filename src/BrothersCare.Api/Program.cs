@@ -67,7 +67,7 @@ if (allowedOrigins.Length > 0)
         options.AddDefaultPolicy(policy =>
             policy.WithOrigins(allowedOrigins)
                 .WithHeaders("Content-Type", "X-CSRF-Token")
-                .WithMethods("GET", "POST", "PUT", "DELETE")
+                .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE")
                 .WithExposedHeaders("Retry-After")
                 .AllowCredentials()));
 }

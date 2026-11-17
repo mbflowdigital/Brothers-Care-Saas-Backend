@@ -63,6 +63,7 @@ public sealed class CreateAppointment(
             command.PatientId,
             command.StartsAt,
             command.EndsAt,
+            excludedAppointmentId: null,
             cancellationToken);
         if (conflicts.Professional)
         {
