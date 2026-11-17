@@ -106,6 +106,7 @@ public static class DependencyInjection
             services.AddScoped<CancelAppointment>();
             services.AddScoped<CompleteAppointment>();
             services.AddScoped<MarkAppointmentNoShow>();
+            services.AddScoped<GetAvailableAppointmentSlots>();
             services.AddScoped<GetProfessionalAvailability>();
             services.AddScoped<SetProfessionalWeeklyAvailability>();
             services.AddScoped<CreateProfessionalAvailabilityBlock>();

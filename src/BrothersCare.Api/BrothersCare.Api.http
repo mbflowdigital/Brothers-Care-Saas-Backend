@@ -3,6 +3,7 @@
 @clinicAdminSessionCookie = replace-with-clinic-administrator-session-cookie
 @csrfToken = replace-with-csrf-token
 @appointmentId = 3fa85f64-5717-4562-b3fc-2c963f66afa6
+@patientId = 3fa85f64-5717-4562-b3fc-2c963f66afa6
 @professionalId = 5fa85f64-5717-4562-b3fc-2c963f66afa6
 @clinicUnitId = 4fa85f64-5717-4562-b3fc-2c963f66afa6
 @availabilityBlockId = 6fa85f64-5717-4562-b3fc-2c963f66afa6
@@ -23,6 +24,20 @@ Accept: application/json
 ###
 
 GET {{BrothersCare_Api_HostAddress}}/api/v1/appointments?from=2026-11-18T00:00:00-03:00&to=2026-11-19T23:59:59-03:00&status=Scheduled
+Accept: application/json
+Cookie: bc_session={{sessionCookie}}
+
+###
+
+### Consultar horários para um paciente
+GET {{BrothersCare_Api_HostAddress}}/api/v1/appointments/available-slots?clinicUnitId={{clinicUnitId}}&date=2026-11-18&durationMinutes=60&patientId={{patientId}}
+Accept: application/json
+Cookie: bc_session={{sessionCookie}}
+
+###
+
+### Consultar horários para reagendar um atendimento
+GET {{BrothersCare_Api_HostAddress}}/api/v1/appointments/available-slots?clinicUnitId={{clinicUnitId}}&date=2026-11-18&durationMinutes=60&appointmentId={{appointmentId}}
 Accept: application/json
 Cookie: bc_session={{sessionCookie}}
 

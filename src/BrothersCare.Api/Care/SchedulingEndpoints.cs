@@ -23,6 +23,19 @@ public static class SchedulingEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
+        endpoints.MapGet("/api/v1/appointments/available-slots", GetAvailableAppointmentSlotsAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("GetAvailableAppointmentSlots")
+            .WithSummary("Lista os horários disponíveis para criar ou reagendar um atendimento.")
+            .WithDescription("O profissional é derivado da sessão. Horários consideram jornada semanal, bloqueios, atendimentos do profissional e conflitos do paciente.")
+            .Produces<AvailableAppointmentSlotsResponse>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
         endpoints.MapGet("/api/v1/appointments", ListAsync)
             .RequireAuthorization()
             .WithTags("Agenda")
@@ -170,6 +183,44 @@ public static class SchedulingEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         return endpoints;
+    }
+
+    private static async Task<Results<Ok<AvailableAppointmentSlotsResponse>, ProblemHttpResult>> GetAvailableAppointmentSlotsAsync(
+        [FromServices] GetAvailableAppointmentSlots getSlots,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var query = context.Request.Query;
+        if (!HasValidAvailableSlotsQuery(query) ||
+            !Guid.TryParse(query["clinicUnitId"].ToString(), out var clinicUnitId) ||
+            !DateOnly.TryParseExact(
+                query["date"].ToString(), "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var date) ||
+            !int.TryParse(
+                query["durationMinutes"].ToString(), NumberStyles.None, CultureInfo.InvariantCulture,
+                out var durationMinutes))
+        {
+            return AvailableSlotsProblem(context, AvailableAppointmentSlotsStatus.InvalidInput);
+        }
+
+        Guid? patientId = Guid.TryParse(query["patientId"].ToString(), out var parsedPatientId)
+            ? parsedPatientId
+            : null;
+        Guid? appointmentId = Guid.TryParse(query["appointmentId"].ToString(), out var parsedAppointmentId)
+            ? parsedAppointmentId
+            : null;
+        var result = await getSlots.ExecuteAsync(
+            clinicUnitId, date, durationMinutes, patientId, appointmentId, cancellationToken);
+
+        if (result.Status == AvailableAppointmentSlotsStatus.Success)
+        {
+            var slots = result.Slots
+                ?? throw new InvalidOperationException("A successful slot query must contain its results.");
+            return TypedResults.Ok(new AvailableAppointmentSlotsResponse(slots));
+        }
+
+        return AvailableSlotsProblem(context, result.Status);
     }
 
     private static async Task<Results<Ok<IReadOnlyList<AppointmentScheduleItem>>, ProblemHttpResult>> ListAsync(
@@ -694,6 +745,50 @@ public static class SchedulingEndpoints
         query["professionalId"].Count <= 1 &&
         query["clinicUnitId"].Count <= 1;
 
+    private static bool HasValidAvailableSlotsQuery(IQueryCollection query) =>
+        query.Keys.All(key =>
+            key.Equals("clinicUnitId", StringComparison.OrdinalIgnoreCase) ||
+            key.Equals("date", StringComparison.OrdinalIgnoreCase) ||
+            key.Equals("durationMinutes", StringComparison.OrdinalIgnoreCase) ||
+            key.Equals("patientId", StringComparison.OrdinalIgnoreCase) ||
+            key.Equals("appointmentId", StringComparison.OrdinalIgnoreCase)) &&
+        query["clinicUnitId"].Count == 1 &&
+        query["date"].Count == 1 &&
+        query["durationMinutes"].Count == 1 &&
+        query["patientId"].Count <= 1 &&
+        query["appointmentId"].Count <= 1 &&
+        query["patientId"].Count + query["appointmentId"].Count == 1;
+
+    private static ProblemHttpResult AvailableSlotsProblem(
+        HttpContext context,
+        AvailableAppointmentSlotsStatus status) =>
+        status switch
+        {
+            AvailableAppointmentSlotsStatus.Unauthenticated => AuthenticationProblems.Create(
+                context, StatusCodes.Status401Unauthorized, "Sessão ausente, inválida ou expirada.",
+                "authentication-required"),
+            AvailableAppointmentSlotsStatus.Forbidden or
+                AvailableAppointmentSlotsStatus.ClinicUnitNotAvailable or
+                AvailableAppointmentSlotsStatus.PatientNotAssigned => AuthenticationProblems.Create(
+                context, StatusCodes.Status403Forbidden,
+                "O paciente ou a unidade não está disponível para este profissional.",
+                "forbidden"),
+            AvailableAppointmentSlotsStatus.ProfessionalNotFound or
+                AvailableAppointmentSlotsStatus.AppointmentNotFound => AuthenticationProblems.Create(
+                context, StatusCodes.Status404NotFound,
+                "Profissional ou agendamento não encontrado nesta empresa.",
+                "appointment-not-found"),
+            AvailableAppointmentSlotsStatus.AppointmentNotScheduled => AuthenticationProblems.Create(
+                context, StatusCodes.Status409Conflict,
+                "Somente atendimentos agendados podem ser reagendados.",
+                "invalid-appointment-status"),
+            AvailableAppointmentSlotsStatus.InvalidInput => AuthenticationProblems.Create(
+                context, StatusCodes.Status400BadRequest,
+                "Informe paciente ou agendamento, unidade, data e duração válidos.",
+                "validation"),
+            _ => throw new InvalidOperationException($"Unsupported available slots status: {status}."),
+        };
+
     private static bool HasValidAvailabilityQuery(IQueryCollection query) =>
         query.Keys.All(key =>
             key.Equals("clinicUnitId", StringComparison.OrdinalIgnoreCase) ||
@@ -704,6 +799,8 @@ public static class SchedulingEndpoints
         query["through"].Count == 1;
 
 }
+
+public sealed record AvailableAppointmentSlotsResponse(IReadOnlyList<AvailableAppointmentSlot> Slots);
 
 /// <summary>Dados para agendar um atendimento sem informar tenant ou profissional.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
