@@ -57,6 +57,19 @@ public sealed class SqlClinicalRecordStore(BrothersCareDbContext dbContext) : IC
                  unit.IsActive
              select assignment.Id).AnyAsync(cancellationToken);
 
+        public Task<ClinicalAppointmentContext?> FindAppointmentContextAsync(
+            Guid tenantId, Guid appointmentId, CancellationToken cancellationToken) =>
+            context.Appointments.AsNoTracking()
+                .Where(item => item.TenantId == tenantId && item.Id == appointmentId)
+                .Select(item => new ClinicalAppointmentContext(item.Id, item.PatientId, item.ClinicUnitId,
+                    item.ProfessionalId, item.Status))
+                .SingleOrDefaultAsync(cancellationToken);
+
+        public Task<bool> HasRecordForAppointmentAsync(
+            Guid tenantId, Guid appointmentId, CancellationToken cancellationToken) =>
+            context.ClinicalRecords.AsNoTracking().AnyAsync(item =>
+                item.TenantId == tenantId && item.AppointmentId == appointmentId, cancellationToken);
+
         public Task<ClinicalRecord?> FindTrackedAsync(
             Guid tenantId, Guid recordId, CancellationToken cancellationToken) =>
             context.ClinicalRecords.SingleOrDefaultAsync(

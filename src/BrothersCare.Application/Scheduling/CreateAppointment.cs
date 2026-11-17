@@ -20,8 +20,8 @@ public sealed class CreateAppointment(
         }
 
         await using var transaction = await store.BeginAsync(cancellationToken);
-        var access = await SchedulingAccess.ResolveProfessionalAsync(
-            principalAccessor.Principal, transaction, timeProvider, cancellationToken);
+        var access = await SchedulingAccess.ResolveAppointmentManagerAsync(
+            principalAccessor.Principal, command.ProfessionalId, transaction, timeProvider, cancellationToken);
         if (access.Status != SchedulingAccessStatus.Success)
         {
             return new(access.Status switch
@@ -42,6 +42,12 @@ public sealed class CreateAppointment(
 
         if (!await transaction.IsActiveUnitLinkedAsync(
                 tenantId, membershipId, command.ClinicUnitId, cancellationToken))
+        {
+            return new(CreateAppointmentStatus.ClinicUnitNotAvailable);
+        }
+
+        if (!await transaction.IsActiveProfessionalUnitLinkedAsync(
+                tenantId, professional.Id, command.ClinicUnitId, cancellationToken))
         {
             return new(CreateAppointmentStatus.ClinicUnitNotAvailable);
         }
@@ -119,11 +125,23 @@ public sealed class CreateAppointment(
 }
 
 public sealed record CreateAppointmentCommand(
+    Guid? ProfessionalId,
     Guid PatientId,
     Guid ClinicUnitId,
     DateTimeOffset StartsAt,
     DateTimeOffset EndsAt,
-    string? Notes);
+    string? Notes)
+{
+    public CreateAppointmentCommand(
+        Guid patientId,
+        Guid clinicUnitId,
+        DateTimeOffset startsAt,
+        DateTimeOffset endsAt,
+        string? notes)
+        : this(null, patientId, clinicUnitId, startsAt, endsAt, notes)
+    {
+    }
+}
 
 public enum CreateAppointmentStatus
 {

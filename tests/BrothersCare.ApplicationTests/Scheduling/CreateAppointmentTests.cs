@@ -25,6 +25,42 @@ public sealed class CreateAppointmentTests
         Assert.Equal(1, context.Scenario.Store.Commits);
     }
 
+    [Theory]
+    [InlineData(TenantMembershipRole.ClinicAdministrator)]
+    [InlineData(TenantMembershipRole.Receptionist)]
+    public async Task ClinicManagerCreatesAppointmentForSelectedProfessional(TenantMembershipRole actorRole)
+    {
+        var scenario = new IdentityScenario();
+        var actor = scenario.AddUser(email: $"{actorRole}@example.invalid");
+        var (tenant, actorMembership, unit) = scenario.AddTenant(actor, actorRole);
+        var professionalUser = scenario.AddUser(email: "professional@example.invalid");
+        var professionalMembership = new TenantMembership(Guid.NewGuid(), tenant.Id, professionalUser.Id,
+            TenantMembershipRole.Professional, scenario.Clock.GetUtcNow());
+        var professional = new Professional(Guid.NewGuid(), tenant.Id, professionalUser.DisplayName,
+            "Fisioterapia", "12345", scenario.Clock.GetUtcNow());
+        professional.ConfigureForMembership(professionalMembership.Id, professionalUser.DisplayName,
+            "Fisioterapia", "CREFITO", "12345");
+        var patient = new Patient(Guid.NewGuid(), tenant.Id, "Paciente da recepção",
+            new DateOnly(1990, 1, 1), scenario.Clock.GetUtcNow());
+        scenario.Store.Memberships.Add(professionalMembership);
+        scenario.Store.UnitMemberships.Add(new ClinicUnitMembership(Guid.NewGuid(), tenant.Id, unit.Id,
+            professionalMembership.Id, scenario.Clock.GetUtcNow()));
+        scenario.Store.Professionals.Add(professional);
+        scenario.Store.Patients.Add(patient);
+        scenario.Store.PatientCareAssignments.Add(new PatientCareAssignment(Guid.NewGuid(), tenant.Id,
+            patient.Id, professional.Id, unit.Id, DateOnly.FromDateTime(scenario.Clock.GetUtcNow().UtcDateTime)));
+        scenario.SignIn(actor, actorMembership);
+        var startsAt = scenario.Clock.GetUtcNow().AddDays(1);
+
+        var result = await Service(scenario).ExecuteAsync(new(professional.Id, patient.Id, unit.Id,
+            startsAt, startsAt.AddHours(1), null), CancellationToken.None);
+
+        Assert.Equal(CreateAppointmentStatus.Success, result.Status);
+        var appointment = Assert.Single(scenario.Store.Appointments);
+        Assert.Equal(professional.Id, appointment.ProfessionalId);
+        Assert.Equal(actorMembership.Id, appointment.CreatedByMembershipId);
+    }
+
     [Fact]
     public async Task MissingSessionIsForbiddenWithoutOpeningScopeFromPayload()
     {

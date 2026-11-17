@@ -102,6 +102,7 @@ public static class DependencyInjection
             services.AddScoped<IAppointmentStore, SqlAppointmentStore>();
             services.AddScoped<CreateAppointment>();
             services.AddScoped<GetSchedulingOptions>();
+            services.AddScoped<GetSchedulingProfessionals>();
             services.AddScoped<ListAppointments>();
             services.AddScoped<GetAppointment>();
             services.AddScoped<RescheduleAppointment>();

@@ -16,6 +16,10 @@ public interface IClinicalRecordTransaction : IAsyncDisposable
         Guid tenantId, Guid userId, Guid membershipId, CancellationToken cancellationToken);
     Task<bool> HasCareAccessAsync(
         Guid tenantId, Guid professionalId, Guid patientId, Guid clinicUnitId, CancellationToken cancellationToken);
+    Task<ClinicalAppointmentContext?> FindAppointmentContextAsync(
+        Guid tenantId, Guid appointmentId, CancellationToken cancellationToken);
+    Task<bool> HasRecordForAppointmentAsync(
+        Guid tenantId, Guid appointmentId, CancellationToken cancellationToken);
     Task<ClinicalRecord?> FindTrackedAsync(Guid tenantId, Guid recordId, CancellationToken cancellationToken);
     Task<ClinicalRecordDetails?> GetAsync(Guid tenantId, Guid recordId, CancellationToken cancellationToken);
     Task<IReadOnlyList<ClinicalRecordSummary>> ListAsync(
@@ -28,6 +32,12 @@ public interface IClinicalRecordTransaction : IAsyncDisposable
 }
 
 public sealed record ClinicalAuthorContext(Guid MembershipId, Guid ProfessionalId, string Name, string? Specialty);
+public sealed record ClinicalAppointmentContext(
+    Guid Id,
+    Guid PatientId,
+    Guid ClinicUnitId,
+    Guid ProfessionalId,
+    AppointmentStatus Status);
 public sealed record ClinicalPatientOption(Guid Id, string Name, IReadOnlyList<Guid> ClinicUnitIds);
 public sealed record ClinicalUnitOption(Guid Id, string Name);
 public sealed record ClinicalRecordOptions(

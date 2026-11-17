@@ -51,12 +51,27 @@ public sealed class ManageClinicalRecords(
         if (!await HasAccessAsync(access, input.PatientId, input.ClinicUnitId, cancellationToken))
             return new(ClinicalRecordOperationStatus.Forbidden);
 
+        if (input.AppointmentId is { } appointmentId)
+        {
+            var appointment = await access.Transaction!.FindAppointmentContextAsync(
+                access.TenantId, appointmentId, cancellationToken);
+            if (appointment is null || appointment.PatientId != input.PatientId ||
+                appointment.ClinicUnitId != input.ClinicUnitId ||
+                appointment.ProfessionalId != access.Author!.ProfessionalId)
+                return new(ClinicalRecordOperationStatus.Forbidden);
+            if (appointment.Status != AppointmentStatus.Completed)
+                return new(ClinicalRecordOperationStatus.AppointmentNotCompleted);
+            if (await access.Transaction.HasRecordForAppointmentAsync(
+                    access.TenantId, appointmentId, cancellationToken))
+                return new(ClinicalRecordOperationStatus.AppointmentAlreadyLinked);
+        }
+
         var now = timeProvider.GetUtcNow();
         ClinicalRecord record;
         try
         {
             record = new ClinicalRecord(Guid.NewGuid(), access.TenantId, input.PatientId, input.ClinicUnitId,
-                access.Author!.MembershipId, null, input.PatientReport, input.ProceduresAndObservations,
+                access.Author!.MembershipId, input.AppointmentId, input.PatientReport, input.ProceduresAndObservations,
                 input.AssessmentAndPlan, now);
         }
         catch (ArgumentException)
@@ -215,7 +230,8 @@ public sealed record ClinicalRecordInput(
     Guid ClinicUnitId,
     string? PatientReport,
     string? ProceduresAndObservations,
-    string? AssessmentAndPlan);
+    string? AssessmentAndPlan,
+    Guid? AppointmentId = null);
 
 public sealed record ClinicalRecordUpdateInput(
     string? PatientReport,
@@ -241,4 +257,6 @@ public enum ClinicalRecordOperationStatus
     Finalized = 6,
     FinalizationInvalid = 7,
     Conflict = 8,
+    AppointmentNotCompleted = 9,
+    AppointmentAlreadyLinked = 10,
 }

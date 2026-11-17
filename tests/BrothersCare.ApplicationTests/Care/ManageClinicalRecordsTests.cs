@@ -121,6 +121,39 @@ public sealed class ManageClinicalRecordsTests
     }
 
     [Fact]
+    public async Task LinksOneEvolutionToACompletedAppointment()
+    {
+        var scenario = new Scenario();
+        var appointmentId = Guid.NewGuid();
+        scenario.Appointment = new(appointmentId, scenario.PatientId, scenario.UnitId,
+            scenario.ProfessionalId, AppointmentStatus.Completed);
+
+        var created = await scenario.Service.CreateAsync(
+            new(scenario.PatientId, scenario.UnitId, null, null, null, appointmentId), default);
+        var duplicate = await scenario.Service.CreateAsync(
+            new(scenario.PatientId, scenario.UnitId, null, null, null, appointmentId), default);
+
+        Assert.Equal(ClinicalRecordOperationStatus.Success, created.Status);
+        Assert.Equal(appointmentId, created.Record!.AppointmentId);
+        Assert.Equal(ClinicalRecordOperationStatus.AppointmentAlreadyLinked, duplicate.Status);
+    }
+
+    [Fact]
+    public async Task RejectsEvolutionForAppointmentThatIsNotCompleted()
+    {
+        var scenario = new Scenario();
+        var appointmentId = Guid.NewGuid();
+        scenario.Appointment = new(appointmentId, scenario.PatientId, scenario.UnitId,
+            scenario.ProfessionalId, AppointmentStatus.Scheduled);
+
+        var result = await scenario.Service.CreateAsync(
+            new(scenario.PatientId, scenario.UnitId, null, null, null, appointmentId), default);
+
+        Assert.Equal(ClinicalRecordOperationStatus.AppointmentNotCompleted, result.Status);
+        Assert.Empty(scenario.Records);
+    }
+
+    [Fact]
     public async Task DoesNotReturnRecordFromAnotherTenant()
     {
         var scenario = new Scenario();
@@ -145,6 +178,7 @@ public sealed class ManageClinicalRecordsTests
         public Guid PatientId { get; } = Guid.NewGuid();
         public Guid UnitId { get; } = Guid.NewGuid();
         public bool HasCareAccess { get; set; } = true;
+        public ClinicalAppointmentContext? Appointment { get; set; }
         public List<ClinicalRecord> Records { get; } = [];
         public CurrentPrincipal? Principal { get; }
         public ManageClinicalRecords Service { get; }
@@ -175,6 +209,11 @@ public sealed class ManageClinicalRecordsTests
                 ? new(MembershipId, ProfessionalId, "Profissional", "Fisioterapia") : null);
         public Task<bool> HasCareAccessAsync(Guid tenantId, Guid professionalId, Guid patientId, Guid clinicUnitId, CancellationToken cancellationToken) =>
             Task.FromResult(HasCareAccess && tenantId == TenantId && professionalId == ProfessionalId && patientId == PatientId && clinicUnitId == UnitId);
+        public Task<ClinicalAppointmentContext?> FindAppointmentContextAsync(Guid tenantId, Guid appointmentId, CancellationToken cancellationToken) =>
+            Task.FromResult(Appointment is not null && tenantId == TenantId && appointmentId == Appointment.Id
+                ? Appointment : null);
+        public Task<bool> HasRecordForAppointmentAsync(Guid tenantId, Guid appointmentId, CancellationToken cancellationToken) =>
+            Task.FromResult(Records.Any(item => item.TenantId == tenantId && item.AppointmentId == appointmentId));
         public Task<ClinicalRecord?> FindTrackedAsync(Guid tenantId, Guid recordId, CancellationToken cancellationToken) =>
             Task.FromResult(Records.SingleOrDefault(item => item.TenantId == tenantId && item.Id == recordId));
         public Task<ClinicalRecordDetails?> GetAsync(Guid tenantId, Guid recordId, CancellationToken cancellationToken) =>

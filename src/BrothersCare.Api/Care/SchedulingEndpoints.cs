@@ -36,6 +36,15 @@ public static class SchedulingEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
+        endpoints.MapGet("/api/v1/appointments/professionals", GetProfessionalsAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("GetSchedulingProfessionals")
+            .WithSummary("Lista os profissionais que compartilham unidades permitidas com o usuário da agenda.")
+            .Produces<IReadOnlyList<SchedulingProfessionalOption>>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
+
         endpoints.MapGet("/api/v1/appointments", ListAsync)
             .RequireAuthorization()
             .WithTags("Agenda")
@@ -460,8 +469,9 @@ public static class SchedulingEndpoints
         context.Response.Headers.CacheControl = "no-store";
         var result = await createAppointment.ExecuteAsync(
             request is null
-                ? new CreateAppointmentCommand(Guid.Empty, Guid.Empty, default, default, null)
+                ? new CreateAppointmentCommand(null, Guid.Empty, Guid.Empty, default, default, null)
                 : new CreateAppointmentCommand(
+                    request.ProfessionalId,
                     request.PatientId,
                     request.ClinicUnitId,
                     request.StartsAt,
@@ -532,9 +542,10 @@ public static class SchedulingEndpoints
         context.Response.Headers.CacheControl = "no-store";
         var result = await rescheduleAppointment.ExecuteAsync(
             request is null
-                ? new RescheduleAppointmentCommand(appointmentId, Guid.Empty, default, default)
+                ? new RescheduleAppointmentCommand(appointmentId, null, Guid.Empty, default, default)
                 : new RescheduleAppointmentCommand(
                     appointmentId,
+                    request.ProfessionalId,
                     request.ClinicUnitId,
                     request.StartsAt,
                     request.EndsAt),
@@ -604,7 +615,7 @@ public static class SchedulingEndpoints
     {
         context.Response.Headers.CacheControl = "no-store";
         var result = await cancelAppointment.ExecuteAsync(
-            new CancelAppointmentCommand(appointmentId, request?.Reason),
+            new CancelAppointmentCommand(appointmentId, request?.ProfessionalId, request?.Reason),
             cancellationToken);
 
         if (result.Status == CancelAppointmentStatus.Success)
@@ -701,12 +712,13 @@ public static class SchedulingEndpoints
     }
 
     private static async Task<Results<Ok<SchedulingOptions>, ProblemHttpResult>> GetOptionsAsync(
+        [FromQuery] Guid? professionalId,
         [FromServices] GetSchedulingOptions getSchedulingOptions,
         HttpContext context,
         CancellationToken cancellationToken)
     {
         context.Response.Headers.CacheControl = "no-store";
-        var result = await getSchedulingOptions.ExecuteAsync(cancellationToken);
+        var result = await getSchedulingOptions.ExecuteAsync(professionalId, cancellationToken);
         if (result.Status == SchedulingOptionsStatus.Success && result.Options is not null)
         {
             return TypedResults.Ok(result.Options);
@@ -729,6 +741,33 @@ public static class SchedulingEndpoints
                 StatusCodes.Status404NotFound,
                 "Perfil profissional não encontrado nesta empresa.",
                 "professional-not-found"),
+        };
+    }
+
+    private static async Task<Results<Ok<IReadOnlyList<SchedulingProfessionalOption>>, ProblemHttpResult>> GetProfessionalsAsync(
+        [FromServices] GetSchedulingProfessionals getProfessionals,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var result = await getProfessionals.ExecuteAsync(cancellationToken);
+        if (result.Status == SchedulingProfessionalsStatus.Success && result.Professionals is not null)
+        {
+            return TypedResults.Ok(result.Professionals);
+        }
+
+        return result.Status switch
+        {
+            SchedulingProfessionalsStatus.Unauthenticated => AuthenticationProblems.Create(
+                context, StatusCodes.Status401Unauthorized,
+                "Sessão ausente, inválida ou expirada.", "authentication-required"),
+            SchedulingProfessionalsStatus.Forbidden => AuthenticationProblems.Create(
+                context, StatusCodes.Status403Forbidden,
+                "Você não possui acesso à agenda desta empresa.", "forbidden"),
+            SchedulingProfessionalsStatus.ProfessionalNotFound => AuthenticationProblems.Create(
+                context, StatusCodes.Status404NotFound,
+                "Perfil profissional não encontrado.", "professional-not-found"),
+            _ => throw new InvalidOperationException($"Unsupported scheduling professionals status: {result.Status}."),
         };
     }
 
@@ -805,6 +844,7 @@ public sealed record AvailableAppointmentSlotsResponse(IReadOnlyList<AvailableAp
 /// <summary>Dados para agendar um atendimento sem informar tenant ou profissional.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CreateAppointmentRequest(
+    Guid? ProfessionalId,
     Guid PatientId,
     Guid ClinicUnitId,
     [property: JsonConverter(typeof(RequiredOffsetDateTimeOffsetJsonConverter))]
@@ -816,6 +856,7 @@ public sealed record CreateAppointmentRequest(
 /// <summary>Novo local e horário de um atendimento agendado.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record RescheduleAppointmentRequest(
+    Guid? ProfessionalId,
     Guid ClinicUnitId,
     [property: JsonConverter(typeof(RequiredOffsetDateTimeOffsetJsonConverter))]
     DateTimeOffset StartsAt,
@@ -824,7 +865,7 @@ public sealed record RescheduleAppointmentRequest(
 
 /// <summary>Motivo obrigatório para cancelar um atendimento agendado.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CancelAppointmentRequest(string? Reason);
+public sealed record CancelAppointmentRequest(Guid? ProfessionalId, string? Reason);
 
 /// <summary>Motivo obrigatório para registrar a falta do paciente.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

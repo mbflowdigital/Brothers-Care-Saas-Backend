@@ -19,8 +19,8 @@ public sealed class RescheduleAppointment(
         }
 
         await using var transaction = await store.BeginAsync(cancellationToken);
-        var access = await SchedulingAccess.ResolveProfessionalAsync(
-            principalAccessor.Principal, transaction, timeProvider, cancellationToken);
+        var access = await SchedulingAccess.ResolveAppointmentManagerAsync(
+            principalAccessor.Principal, command.ProfessionalId, transaction, timeProvider, cancellationToken);
         if (access.Status != SchedulingAccessStatus.Success)
         {
             return new(access.Status switch
@@ -49,6 +49,12 @@ public sealed class RescheduleAppointment(
 
         if (!await transaction.IsActiveUnitLinkedAsync(
                 scope.TenantId, scope.MembershipId, command.ClinicUnitId, cancellationToken))
+        {
+            return new(RescheduleAppointmentStatus.ClinicUnitNotAvailable);
+        }
+
+        if (!await transaction.IsActiveProfessionalUnitLinkedAsync(
+                scope.TenantId, scope.Professional.Id, command.ClinicUnitId, cancellationToken))
         {
             return new(RescheduleAppointmentStatus.ClinicUnitNotAvailable);
         }
@@ -111,9 +117,20 @@ public sealed class RescheduleAppointment(
 
 public sealed record RescheduleAppointmentCommand(
     Guid AppointmentId,
+    Guid? ProfessionalId,
     Guid ClinicUnitId,
     DateTimeOffset StartsAt,
-    DateTimeOffset EndsAt);
+    DateTimeOffset EndsAt)
+{
+    public RescheduleAppointmentCommand(
+        Guid appointmentId,
+        Guid clinicUnitId,
+        DateTimeOffset startsAt,
+        DateTimeOffset endsAt)
+        : this(appointmentId, null, clinicUnitId, startsAt, endsAt)
+    {
+    }
+}
 
 public enum RescheduleAppointmentStatus
 {

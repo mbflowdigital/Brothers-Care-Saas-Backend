@@ -293,13 +293,16 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     public Task<IReadOnlyList<SchedulingPatientOption>> ListPatientOptionsAsync(
         Guid tenantId,
         Guid professionalId,
+        Guid actorMembershipId,
         CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<SchedulingPatientOption>>(
             (from assignment in PatientCareAssignments
              join patient in Patients on assignment.PatientId equals patient.Id
              where assignment.TenantId == tenantId && patient.TenantId == tenantId &&
                  assignment.ProfessionalId == professionalId && assignment.Status == CareAssignmentStatus.Active &&
-                 patient.Status == PatientStatus.Active
+                 patient.Status == PatientStatus.Active &&
+                 UnitMemberships.Any(link => link.TenantId == tenantId &&
+                     link.TenantMembershipId == actorMembershipId && link.ClinicUnitId == assignment.ClinicUnitId)
              orderby patient.FullName, patient.Id
              select new SchedulingPatientOption(patient.Id, patient.FullName, patient.HealthPlan)).ToArray());
 
@@ -314,6 +317,27 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
                  link.TenantMembershipId == membershipId && unit.IsActive
              orderby unit.Name, unit.Id
              select new SchedulingClinicUnitOption(unit.Id, unit.Name, unit.TimeZoneId)).ToArray());
+
+    public Task<IReadOnlyList<SchedulingProfessionalOption>> ListProfessionalOptionsAsync(
+        Guid tenantId,
+        Guid membershipId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<SchedulingProfessionalOption>>(
+            (from professional in Professionals
+             join professionalMembership in Memberships on professional.TenantMembershipId equals professionalMembership.Id
+             where professional.TenantId == tenantId && professionalMembership.TenantId == tenantId &&
+                 professional.Status == ProfessionalStatus.Active &&
+                 professionalMembership.Status == MembershipStatus.Active &&
+                 UnitMemberships.Any(professionalUnit =>
+                     professionalUnit.TenantId == tenantId &&
+                     professionalUnit.TenantMembershipId == professionalMembership.Id &&
+                     UnitMemberships.Any(actorUnit =>
+                         actorUnit.TenantId == tenantId &&
+                         actorUnit.TenantMembershipId == membershipId &&
+                         actorUnit.ClinicUnitId == professionalUnit.ClinicUnitId))
+             orderby professional.FullName, professional.Id
+             select new SchedulingProfessionalOption(
+                 professional.Id, professional.FullName, professional.Specialty)).ToArray());
 
     public Task<AppointmentConflicts> FindConflictsAsync(
         Guid tenantId,
