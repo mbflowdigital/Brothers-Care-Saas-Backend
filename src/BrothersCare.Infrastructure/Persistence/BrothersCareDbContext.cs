@@ -335,7 +335,9 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.Property(item => item.AssessmentAndPlan).HasColumnType("nvarchar(max)").IsRequired();
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
         entity.Property(item => item.Version).IsRowVersion().IsConcurrencyToken();
-        entity.HasIndex(item => new { item.TenantId, item.AppointmentId });
+        entity.HasIndex(item => new { item.TenantId, item.AppointmentId })
+            .IsUnique()
+            .HasFilter("[AppointmentId] IS NOT NULL");
         entity.HasIndex(item => new { item.TenantId, item.PatientId, item.CreatedAt });
         entity.HasIndex(item => new { item.TenantId, item.AuthorMembershipId, item.Status });
         entity.HasOne<Appointment>()

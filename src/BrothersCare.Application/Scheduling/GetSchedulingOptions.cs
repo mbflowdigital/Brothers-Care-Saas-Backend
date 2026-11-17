@@ -8,11 +8,16 @@ public sealed class GetSchedulingOptions(
     IAppointmentStore store,
     TimeProvider timeProvider)
 {
-    public async Task<SchedulingOptionsResult> ExecuteAsync(CancellationToken cancellationToken)
+    public Task<SchedulingOptionsResult> ExecuteAsync(CancellationToken cancellationToken) =>
+        ExecuteAsync(null, cancellationToken);
+
+    public async Task<SchedulingOptionsResult> ExecuteAsync(
+        Guid? professionalId,
+        CancellationToken cancellationToken)
     {
         await using var transaction = await store.BeginAsync(cancellationToken);
-        var access = await SchedulingAccess.ResolveProfessionalAsync(
-            principalAccessor.Principal, transaction, timeProvider, cancellationToken);
+        var access = await SchedulingAccess.ResolveAppointmentManagerAsync(
+            principalAccessor.Principal, professionalId, transaction, timeProvider, cancellationToken);
         if (access.Status != SchedulingAccessStatus.Success)
         {
             return new(access.Status switch
@@ -26,8 +31,15 @@ public sealed class GetSchedulingOptions(
 
         var scope = access.Scope
             ?? throw new InvalidOperationException("Successful scheduling access must include its scope.");
+        var allowedProfessionals = await transaction.ListProfessionalOptionsAsync(
+            scope.TenantId, scope.MembershipId, cancellationToken);
+        if (!allowedProfessionals.Any(item => item.Id == scope.Professional.Id))
+        {
+            return new(SchedulingOptionsStatus.Forbidden);
+        }
+
         var patients = await transaction.ListPatientOptionsAsync(
-            scope.TenantId, scope.Professional.Id, cancellationToken);
+            scope.TenantId, scope.Professional.Id, scope.MembershipId, cancellationToken);
         var clinicUnits = await transaction.ListClinicUnitOptionsAsync(
             scope.TenantId, scope.MembershipId, cancellationToken);
         return new(SchedulingOptionsStatus.Success, new(

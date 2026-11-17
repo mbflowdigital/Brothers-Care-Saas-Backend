@@ -21,8 +21,8 @@ public sealed class CancelAppointment(
         }
 
         await using var transaction = await store.BeginAsync(cancellationToken);
-        var access = await SchedulingAccess.ResolveProfessionalAsync(
-            principalAccessor.Principal, transaction, timeProvider, cancellationToken);
+        var access = await SchedulingAccess.ResolveAppointmentManagerAsync(
+            principalAccessor.Principal, command.ProfessionalId, transaction, timeProvider, cancellationToken);
         if (access.Status != SchedulingAccessStatus.Success)
         {
             return new(access.Status switch
@@ -48,6 +48,12 @@ public sealed class CancelAppointment(
             return new(CancelAppointmentStatus.NotScheduled);
         }
 
+        if (!await transaction.IsActiveUnitLinkedAsync(
+                scope.TenantId, scope.MembershipId, appointment.ClinicUnitId, cancellationToken))
+        {
+            return new(CancelAppointmentStatus.Forbidden);
+        }
+
         var now = timeProvider.GetUtcNow();
         appointment.Cancel(command.Reason, scope.MembershipId, now);
         await transaction.CommitAsync(cancellationToken);
@@ -65,7 +71,13 @@ public sealed class CancelAppointment(
     }
 }
 
-public sealed record CancelAppointmentCommand(Guid AppointmentId, string? Reason);
+public sealed record CancelAppointmentCommand(Guid AppointmentId, Guid? ProfessionalId, string? Reason)
+{
+    public CancelAppointmentCommand(Guid appointmentId, string? reason)
+        : this(appointmentId, null, reason)
+    {
+    }
+}
 
 public enum CancelAppointmentStatus
 {

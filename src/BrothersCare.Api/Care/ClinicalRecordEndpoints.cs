@@ -61,7 +61,7 @@ public static class ClinicalRecordEndpoints
         context.Response.Headers.CacheControl = "no-store";
         var result = await service.CreateAsync(new ClinicalRecordInput(request?.PatientId ?? Guid.Empty,
             request?.ClinicUnitId ?? Guid.Empty, request?.PatientReport, request?.ProceduresAndObservations,
-            request?.AssessmentAndPlan), cancellationToken);
+            request?.AssessmentAndPlan, request?.AppointmentId), cancellationToken);
         return result.Status == ClinicalRecordOperationStatus.Success && result.Record is not null
             ? TypedResults.Created($"/api/v1/clinical-records/{result.Record.Id:D}", result.Record)
             : Problem(context, result.Status);
@@ -108,6 +108,12 @@ public static class ClinicalRecordEndpoints
         ClinicalRecordOperationStatus.Conflict => AuthenticationProblems.Create(context, 409,
             "Esta evolução foi atualizada em outra sessão. Recarregue antes de continuar.",
             "clinical-record-conflict"),
+        ClinicalRecordOperationStatus.AppointmentNotCompleted => AuthenticationProblems.Create(context, 409,
+            "Conclua o atendimento antes de registrar uma evolução vinculada.",
+            "appointment-not-completed"),
+        ClinicalRecordOperationStatus.AppointmentAlreadyLinked => AuthenticationProblems.Create(context, 409,
+            "Este atendimento já possui uma evolução clínica.",
+            "appointment-already-linked"),
         _ => AuthenticationProblems.Create(context, 400,
             "Confira os dados informados para a evolução clínica.", "validation"),
     };
@@ -119,7 +125,8 @@ public sealed record ClinicalRecordCreateRequest(
     Guid? ClinicUnitId,
     string? PatientReport,
     string? ProceduresAndObservations,
-    string? AssessmentAndPlan);
+    string? AssessmentAndPlan,
+    Guid? AppointmentId);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ClinicalRecordUpdateRequest(

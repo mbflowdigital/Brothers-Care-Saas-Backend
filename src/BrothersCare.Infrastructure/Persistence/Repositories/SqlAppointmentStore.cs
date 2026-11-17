@@ -267,13 +267,17 @@ public sealed class SqlAppointmentStore(BrothersCareDbContext dbContext) : IAppo
         public async Task<IReadOnlyList<SchedulingPatientOption>> ListPatientOptionsAsync(
             Guid tenantId,
             Guid professionalId,
+            Guid actorMembershipId,
             CancellationToken cancellationToken) =>
             await (from assignment in context.PatientCareAssignments.AsNoTracking()
                    join patient in context.Patients.AsNoTracking()
                        on new { assignment.TenantId, PatientId = assignment.PatientId }
                        equals new { patient.TenantId, PatientId = patient.Id }
                    where assignment.TenantId == tenantId && assignment.ProfessionalId == professionalId &&
-                       assignment.Status == CareAssignmentStatus.Active && patient.Status == PatientStatus.Active
+                       assignment.Status == CareAssignmentStatus.Active && patient.Status == PatientStatus.Active &&
+                       context.ClinicUnitMemberships.Any(link =>
+                           link.TenantId == tenantId && link.TenantMembershipId == actorMembershipId &&
+                           link.ClinicUnitId == assignment.ClinicUnitId)
                    orderby patient.FullName, patient.Id
                    select new SchedulingPatientOption(patient.Id, patient.FullName, patient.HealthPlan))
                 .ToListAsync(cancellationToken);
@@ -291,6 +295,28 @@ public sealed class SqlAppointmentStore(BrothersCareDbContext dbContext) : IAppo
                    where link.TenantId == tenantId && link.TenantMembershipId == membershipId && unit.IsActive
                    orderby unit.Name, unit.Id
                    select new SchedulingClinicUnitOption(unit.Id, unit.Name, unit.TimeZoneId))
+                .ToListAsync(cancellationToken);
+
+        public async Task<IReadOnlyList<SchedulingProfessionalOption>> ListProfessionalOptionsAsync(
+            Guid tenantId,
+            Guid membershipId,
+            CancellationToken cancellationToken) =>
+            await (from professional in context.Professionals.AsNoTracking()
+                   join membership in context.TenantMemberships.AsNoTracking()
+                       on new { professional.TenantId, MembershipId = professional.TenantMembershipId }
+                       equals new { membership.TenantId, MembershipId = (Guid?)membership.Id }
+                   where professional.TenantId == tenantId && professional.Status == ProfessionalStatus.Active &&
+                       membership.Status == MembershipStatus.Active &&
+                       context.ClinicUnitMemberships.Any(professionalUnit =>
+                           professionalUnit.TenantId == tenantId &&
+                           professionalUnit.TenantMembershipId == membership.Id &&
+                           context.ClinicUnitMemberships.Any(actorUnit =>
+                               actorUnit.TenantId == tenantId &&
+                               actorUnit.TenantMembershipId == membershipId &&
+                               actorUnit.ClinicUnitId == professionalUnit.ClinicUnitId))
+                   orderby professional.FullName, professional.Id
+                   select new SchedulingProfessionalOption(
+                       professional.Id, professional.FullName, professional.Specialty))
                 .ToListAsync(cancellationToken);
 
         public async Task<AppointmentConflicts> FindConflictsAsync(

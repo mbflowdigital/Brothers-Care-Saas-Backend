@@ -98,9 +98,15 @@ public interface IAppointmentTransaction : IAsyncDisposable
     Task<IReadOnlyList<SchedulingPatientOption>> ListPatientOptionsAsync(
         Guid tenantId,
         Guid professionalId,
+        Guid actorMembershipId,
         CancellationToken cancellationToken);
 
     Task<IReadOnlyList<SchedulingClinicUnitOption>> ListClinicUnitOptionsAsync(
+        Guid tenantId,
+        Guid membershipId,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<SchedulingProfessionalOption>> ListProfessionalOptionsAsync(
         Guid tenantId,
         Guid membershipId,
         CancellationToken cancellationToken);
@@ -154,6 +160,7 @@ public sealed record SchedulingProfessional(Guid Id, Guid MembershipId, int? Def
 public sealed record SchedulingPatientOption(Guid Id, string FullName, string? HealthPlan);
 
 public sealed record SchedulingClinicUnitOption(Guid Id, string Name, string TimeZoneId);
+public sealed record SchedulingProfessionalOption(Guid Id, string Name, string? Specialty);
 
 public sealed record AppointmentConflicts(bool Professional, bool Patient);
 

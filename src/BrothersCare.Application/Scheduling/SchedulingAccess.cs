@@ -32,6 +32,51 @@ internal static class SchedulingAccess
                 new(membership.TenantId, membership.MembershipId, professional));
     }
 
+    public static async Task<SchedulingAccessResult> ResolveAppointmentManagerAsync(
+        CurrentPrincipal? principal,
+        Guid? targetProfessionalId,
+        IAppointmentTransaction transaction,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var membership = await ResolveActiveMembershipAsync(
+            principal, transaction, timeProvider, cancellationToken);
+        if (membership.Status != SchedulingAccessStatus.Success)
+        {
+            return new(membership.Status);
+        }
+
+        SchedulingProfessional? professional;
+        if (membership.Role == TenantMembershipRole.Professional)
+        {
+            professional = await transaction.FindActiveProfessionalAsync(
+                membership.TenantId, principal!.UserId, membership.MembershipId, cancellationToken);
+            if (professional is not null && targetProfessionalId is { } requestedId && requestedId != professional.Id)
+            {
+                return new(SchedulingAccessStatus.Forbidden);
+            }
+        }
+        else if (membership.Role is TenantMembershipRole.ClinicAdministrator or TenantMembershipRole.Receptionist)
+        {
+            if (targetProfessionalId is not { } requestedId || requestedId == Guid.Empty)
+            {
+                return new(SchedulingAccessStatus.ProfessionalNotFound);
+            }
+
+            professional = await transaction.FindActiveProfessionalByIdAsync(
+                membership.TenantId, requestedId, cancellationToken);
+        }
+        else
+        {
+            return new(SchedulingAccessStatus.Forbidden);
+        }
+
+        return professional is null
+            ? new(SchedulingAccessStatus.ProfessionalNotFound)
+            : new(SchedulingAccessStatus.Success,
+                new(membership.TenantId, membership.MembershipId, professional));
+    }
+
     public static async Task<SchedulingAgendaAccessResult> ResolveAgendaViewerAsync(
         CurrentPrincipal? principal,
         IAppointmentTransaction transaction,
@@ -45,10 +90,10 @@ internal static class SchedulingAccess
             return new(membership.Status);
         }
 
-        if (membership.Role == TenantMembershipRole.ClinicAdministrator)
+        if (membership.Role is TenantMembershipRole.ClinicAdministrator or TenantMembershipRole.Receptionist)
         {
             return new(SchedulingAccessStatus.Success,
-                new SchedulingAgendaScope(membership.TenantId, null, IsClinicAdministrator: true));
+                new SchedulingAgendaScope(membership.TenantId, membership.MembershipId, null, IsClinicAdministrator: true));
         }
 
         if (membership.Role != TenantMembershipRole.Professional)
@@ -61,7 +106,7 @@ internal static class SchedulingAccess
         return professional is null
             ? new(SchedulingAccessStatus.ProfessionalNotFound)
             : new(SchedulingAccessStatus.Success,
-                new SchedulingAgendaScope(membership.TenantId, professional.Id, IsClinicAdministrator: false));
+                new SchedulingAgendaScope(membership.TenantId, membership.MembershipId, professional.Id, IsClinicAdministrator: false));
     }
 
     public static async Task<SchedulingAvailabilityAccessResult> ResolveAvailabilityManagerAsync(
@@ -159,6 +204,7 @@ internal sealed record SchedulingScope(
 
 internal sealed record SchedulingAgendaScope(
     Guid TenantId,
+    Guid MembershipId,
     Guid? ProfessionalId,
     bool IsClinicAdministrator);
 

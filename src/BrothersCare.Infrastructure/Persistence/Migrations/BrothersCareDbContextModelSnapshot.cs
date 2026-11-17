@@ -171,7 +171,9 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.HasIndex("TenantId", "AppointmentId");
+                    b.HasIndex("TenantId", "AppointmentId")
+                        .IsUnique()
+                        .HasFilter("[AppointmentId] IS NOT NULL");
 
                     b.HasIndex("TenantId", "ClinicUnitId");
 
@@ -402,6 +404,7 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.ToTable("professional_availability_windows", null, t =>
                         {
                             t.HasCheckConstraint("CK_professional_availability_windows_day", "[DayOfWeek] BETWEEN 0 AND 6");
+
                             t.HasCheckConstraint("CK_professional_availability_windows_interval", "[StartsAt] < [EndsAt]");
                         });
                 });
