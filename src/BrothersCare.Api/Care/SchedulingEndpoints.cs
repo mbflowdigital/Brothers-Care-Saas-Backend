@@ -73,6 +73,19 @@ public static class SchedulingEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
+        endpoints.MapPost("/api/v1/appointments/{appointmentId:guid}/cancel", CancelAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("CancelAppointment")
+            .WithSummary("Cancela um atendimento agendado do profissional autenticado.")
+            .WithDescription("Exige um motivo e preserva o registro do atendimento cancelado.")
+            .Produces<AppointmentItem>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
         return endpoints;
     }
 
@@ -305,6 +318,56 @@ public static class SchedulingEndpoints
         };
     }
 
+    private static async Task<Results<Ok<AppointmentItem>, ProblemHttpResult>> CancelAsync(
+        Guid appointmentId,
+        [FromBody] CancelAppointmentRequest? request,
+        [FromServices] CancelAppointment cancelAppointment,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var result = await cancelAppointment.ExecuteAsync(
+            new CancelAppointmentCommand(appointmentId, request?.Reason),
+            cancellationToken);
+
+        if (result.Status == CancelAppointmentStatus.Success)
+        {
+            return TypedResults.Ok(result.Appointment
+                ?? throw new InvalidOperationException("A successful cancellation result must contain an appointment."));
+        }
+
+        return result.Status switch
+        {
+            CancelAppointmentStatus.Unauthenticated => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status401Unauthorized,
+                "Sessão ausente, inválida ou expirada.",
+                "authentication-required"),
+            CancelAppointmentStatus.Forbidden => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status403Forbidden,
+                "O agendamento não está disponível para este profissional.",
+                "forbidden"),
+            CancelAppointmentStatus.ProfessionalNotFound or
+                CancelAppointmentStatus.NotFound => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status404NotFound,
+                "Agendamento não encontrado.",
+                "appointment-not-found"),
+            CancelAppointmentStatus.NotScheduled => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status409Conflict,
+                "Somente atendimentos agendados podem ser cancelados.",
+                "invalid-appointment-status"),
+            CancelAppointmentStatus.InvalidInput => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status400BadRequest,
+                "Informe um motivo de cancelamento com até 500 caracteres.",
+                "validation"),
+            _ => throw new InvalidOperationException($"Unsupported appointment cancellation status: {result.Status}."),
+        };
+    }
+
     private static async Task<Results<Ok<SchedulingOptions>, ProblemHttpResult>> GetOptionsAsync(
         [FromServices] GetSchedulingOptions getSchedulingOptions,
         HttpContext context,
@@ -371,6 +434,10 @@ public sealed record RescheduleAppointmentRequest(
     DateTimeOffset StartsAt,
     [property: JsonConverter(typeof(RequiredOffsetDateTimeOffsetJsonConverter))]
     DateTimeOffset EndsAt);
+
+/// <summary>Motivo obrigatório para cancelar um atendimento agendado.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CancelAppointmentRequest(string? Reason);
 
 public sealed class RequiredOffsetDateTimeOffsetJsonConverter : JsonConverter<DateTimeOffset>
 {
