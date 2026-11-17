@@ -31,6 +31,7 @@ public sealed class GetSchedulingOptions(
         var clinicUnits = await transaction.ListClinicUnitOptionsAsync(
             scope.TenantId, scope.MembershipId, cancellationToken);
         return new(SchedulingOptionsStatus.Success, new(
+            scope.Professional.Id,
             patients,
             clinicUnits,
             scope.Professional.DefaultAppointmentDurationMinutes));
@@ -46,6 +47,7 @@ public enum SchedulingOptionsStatus
 }
 
 public sealed record SchedulingOptions(
+    Guid ProfessionalId,
     IReadOnlyList<SchedulingPatientOption> Patients,
     IReadOnlyList<SchedulingClinicUnitOption> ClinicUnits,
     int? DefaultAppointmentDurationMinutes);

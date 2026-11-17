@@ -58,6 +58,12 @@ public sealed class RescheduleAppointment(
             return new(RescheduleAppointmentStatus.StartsInPast);
         }
 
+        if (!await transaction.IsProfessionalAvailableAsync(
+                scope.TenantId, scope.Professional.Id, command.ClinicUnitId, command.StartsAt, command.EndsAt, cancellationToken))
+        {
+            return new(RescheduleAppointmentStatus.ProfessionalUnavailable);
+        }
+
         var conflicts = await transaction.FindConflictsAsync(
             scope.TenantId,
             scope.Professional.Id,
@@ -122,6 +128,7 @@ public enum RescheduleAppointmentStatus
     StartsInPast = 9,
     ProfessionalConflict = 10,
     PatientConflict = 11,
+    ProfessionalUnavailable = 12,
 }
 
 public sealed record RescheduleAppointmentResult(

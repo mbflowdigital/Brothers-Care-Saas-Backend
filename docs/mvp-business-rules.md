@@ -136,7 +136,10 @@ As regras de criação e transição desta seção estão aprovadas para o fluxo
 - A sobreposição ocorre quando `existente.inicio < novo.fim` e `existente.fim > novo.inicio`.
 - Agendamentos `Realizado`, `Falta` e `Cancelado` não reservam horário para a validação de novos agendamentos.
 - A verificação de conflito e a gravação devem ocorrer na mesma transação e considerar requisições concorrentes.
-- Disponibilidade semanal, intervalos, férias e bloqueios do profissional serão tratados em uma etapa posterior. Até essa implementação, estar sem conflito não representa disponibilidade configurada.
+- A jornada semanal é configurada por profissional e unidade, usando o fuso horário local da unidade. Uma jornada vazia ainda permite agendamentos sem validação do expediente como regra temporária de transição.
+- Bloqueios pontuais e férias são globais para o profissional, independentemente da unidade, e impedem novos agendamentos sobrepostos.
+- Só é possível criar um bloqueio ou período de férias quando não houver agendamento `Agendado` sobreposto. Horários adjacentes são permitidos; atendimentos existentes não são cancelados nem alterados.
+- O profissional gerencia somente a própria disponibilidade. O administrador da clínica pode gerenciar profissionais do tenant ativo; nenhum desses acessos alcança outro tenant.
 
 ### Reagendamento, cancelamento e encerramento
 

@@ -135,6 +135,36 @@ public sealed class CreateAppointmentTests
         Assert.Equal(CreateAppointmentStatus.Success, result.Status);
     }
 
+    [Fact]
+    public async Task ConfiguredWeeklyAvailabilityUsesTheClinicUnitTimeZone()
+    {
+        var context = CreateAuthorizedContext();
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(context.Unit.TimeZoneId);
+        var localDate = TimeZoneInfo.ConvertTime(context.Scenario.Clock.GetUtcNow().AddDays(14), timeZone).Date.AddDays(1);
+        var localStart = DateTime.SpecifyKind(localDate.AddHours(9), DateTimeKind.Unspecified);
+        var utcStart = TimeZoneInfo.ConvertTimeToUtc(localStart, timeZone);
+        var startsAt = new DateTimeOffset(utcStart, TimeSpan.Zero);
+        context.Scenario.Store.AvailabilityWindows.Add(new ProfessionalAvailabilityWindow(
+            Guid.NewGuid(),
+            context.Tenant.Id,
+            context.Professional.Id,
+            context.Unit.Id,
+            localStart.DayOfWeek,
+            new TimeOnly(9, 0),
+            new TimeOnly(10, 0),
+            context.Scenario.Clock.GetUtcNow()));
+
+        var insideWindow = await Service(context.Scenario).ExecuteAsync(
+            new(context.Patient.Id, context.Unit.Id, startsAt, startsAt.AddHours(1), null),
+            CancellationToken.None);
+        var outsideWindow = await Service(context.Scenario).ExecuteAsync(
+            new(context.Patient.Id, context.Unit.Id, startsAt.AddHours(1), startsAt.AddHours(2), null),
+            CancellationToken.None);
+
+        Assert.Equal(CreateAppointmentStatus.Success, insideWindow.Status);
+        Assert.Equal(CreateAppointmentStatus.ProfessionalUnavailable, outsideWindow.Status);
+    }
+
     private static Task<CreateAppointmentResult> ExecuteValidAsync(AppointmentContext context)
     {
         var startsAt = context.Scenario.Clock.GetUtcNow().AddDays(1);

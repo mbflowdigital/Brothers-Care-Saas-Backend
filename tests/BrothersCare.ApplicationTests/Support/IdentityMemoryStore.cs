@@ -28,6 +28,8 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
     public List<ClinicUnit> Units { get; } = [];
     public List<Appointment> Appointments { get; } = [];
     public List<Professional> Professionals { get; } = [];
+    public List<ProfessionalAvailabilityWindow> AvailabilityWindows { get; } = [];
+    public List<ProfessionalAvailabilityBlock> AvailabilityBlocks { get; } = [];
     public List<Patient> Patients { get; } = [];
     public List<PatientCareAssignment> PatientCareAssignments { get; } = [];
     public List<TenantMembership> Memberships { get; } = [];
@@ -135,6 +137,43 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
                 professional.DefaultAppointmentDurationMinutes));
     }
 
+    public Task<SchedulingProfessional?> FindActiveProfessionalByIdAsync(
+        Guid tenantId,
+        Guid professionalId,
+        CancellationToken cancellationToken)
+    {
+        var professional = Professionals.SingleOrDefault(item =>
+            item.TenantId == tenantId && item.Id == professionalId &&
+            item.Status == ProfessionalStatus.Active);
+        var membership = professional is null ? null : Memberships.SingleOrDefault(item =>
+            item.TenantId == tenantId && item.Id == professional.TenantMembershipId &&
+            item.Status == MembershipStatus.Active);
+        var tenantIsActive = Tenants.Any(item => item.Id == tenantId && item.Status == TenantStatus.Active);
+        return Task.FromResult(professional is null || membership is null || !tenantIsActive
+            ? null
+            : new SchedulingProfessional(
+                professional.Id,
+                membership.Id,
+                professional.DefaultAppointmentDurationMinutes));
+    }
+
+    public Task<bool> IsActiveProfessionalUnitLinkedAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid clinicUnitId,
+        CancellationToken cancellationToken)
+    {
+        var professional = Professionals.SingleOrDefault(item =>
+            item.TenantId == tenantId && item.Id == professionalId &&
+            item.Status == ProfessionalStatus.Active);
+        return Task.FromResult(professional is not null &&
+            Memberships.Any(item => item.TenantId == tenantId && item.Id == professional.TenantMembershipId &&
+                item.Status == MembershipStatus.Active) &&
+            Units.Any(item => item.TenantId == tenantId && item.Id == clinicUnitId && item.IsActive) &&
+            UnitMemberships.Any(item => item.TenantId == tenantId &&
+                item.TenantMembershipId == professional.TenantMembershipId && item.ClinicUnitId == clinicUnitId));
+    }
+
     public Task<bool> IsActiveUnitLinkedAsync(
         Guid tenantId,
         Guid membershipId,
@@ -153,6 +192,103 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
                 item.Status == PatientStatus.Active) &&
             PatientCareAssignments.Any(item => item.TenantId == tenantId && item.PatientId == patientId &&
                 item.ProfessionalId == professionalId && item.Status == CareAssignmentStatus.Active));
+
+    public Task<bool> IsProfessionalAvailableAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid clinicUnitId,
+        DateTimeOffset startsAt,
+        DateTimeOffset endsAt,
+        CancellationToken cancellationToken)
+    {
+        if (AvailabilityBlocks.Any(item => item.TenantId == tenantId && item.ProfessionalId == professionalId &&
+                item.StartsAt < endsAt && item.EndsAt > startsAt))
+        {
+            return Task.FromResult(false);
+        }
+
+        var windows = AvailabilityWindows.Where(item =>
+            item.TenantId == tenantId && item.ProfessionalId == professionalId &&
+            item.ClinicUnitId == clinicUnitId).ToArray();
+        if (windows.Length == 0)
+        {
+            return Task.FromResult(true);
+        }
+
+        var timeZoneId = Units.SingleOrDefault(item => item.TenantId == tenantId && item.Id == clinicUnitId)?.TimeZoneId;
+        if (string.IsNullOrWhiteSpace(timeZoneId))
+        {
+            return Task.FromResult(false);
+        }
+
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        var localStart = TimeZoneInfo.ConvertTime(startsAt, timeZone);
+        var localEnd = TimeZoneInfo.ConvertTime(endsAt, timeZone);
+        if (localStart.Date != localEnd.Date)
+        {
+            return Task.FromResult(false);
+        }
+
+        var startTime = TimeOnly.FromDateTime(localStart.DateTime);
+        var endTime = TimeOnly.FromDateTime(localEnd.DateTime);
+        return Task.FromResult(windows.Any(item => item.DayOfWeek == localStart.DayOfWeek &&
+            item.StartsAt <= startTime && item.EndsAt >= endTime));
+    }
+
+    public Task<IReadOnlyList<ProfessionalAvailabilityWindow>> ListAvailabilityWindowsAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid clinicUnitId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ProfessionalAvailabilityWindow>>(AvailabilityWindows
+            .Where(item => item.TenantId == tenantId && item.ProfessionalId == professionalId &&
+                item.ClinicUnitId == clinicUnitId)
+            .OrderBy(item => item.DayOfWeek).ThenBy(item => item.StartsAt).ToArray());
+
+    public Task ReplaceAvailabilityWindowsAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid clinicUnitId,
+        IReadOnlyList<ProfessionalAvailabilityWindow> windows,
+        CancellationToken cancellationToken)
+    {
+        AvailabilityWindows.RemoveAll(item => item.TenantId == tenantId &&
+            item.ProfessionalId == professionalId && item.ClinicUnitId == clinicUnitId);
+        AvailabilityWindows.AddRange(windows);
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> HasScheduledAppointmentOverlapAsync(
+        Guid tenantId,
+        Guid professionalId,
+        DateTimeOffset startsAt,
+        DateTimeOffset endsAt,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(Appointments.Any(item => item.TenantId == tenantId &&
+            item.ProfessionalId == professionalId && item.Status == AppointmentStatus.Scheduled &&
+            item.StartsAt < endsAt && item.EndsAt > startsAt));
+
+    public Task<IReadOnlyList<ProfessionalAvailabilityBlock>> ListAvailabilityBlocksAsync(
+        Guid tenantId,
+        Guid professionalId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ProfessionalAvailabilityBlock>>(AvailabilityBlocks.Where(item =>
+            item.TenantId == tenantId && item.ProfessionalId == professionalId && item.StartsAt < to && item.EndsAt > from)
+            .OrderBy(item => item.StartsAt).ToArray());
+
+    public Task<ProfessionalAvailabilityBlock?> FindAvailabilityBlockAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid blockId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(AvailabilityBlocks.SingleOrDefault(item =>
+            item.TenantId == tenantId && item.ProfessionalId == professionalId && item.Id == blockId));
+
+    public void AddAvailabilityBlock(ProfessionalAvailabilityBlock block) => AvailabilityBlocks.Add(block);
+
+    public void RemoveAvailabilityBlock(ProfessionalAvailabilityBlock block) => AvailabilityBlocks.Remove(block);
 
     public Task<IReadOnlyList<SchedulingPatientOption>> ListPatientOptionsAsync(
         Guid tenantId,

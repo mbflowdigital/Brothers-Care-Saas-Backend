@@ -300,6 +300,91 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                     b.ToTable("professionals", (string)null);
                 });
 
+            modelBuilder.Entity("BrothersCare.Domain.Care.ProfessionalAvailabilityBlock", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("EndsAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("ProfessionalId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset>("StartsAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "ProfessionalId", "StartsAt");
+
+                    b.ToTable("professional_availability_blocks", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_professional_availability_blocks_interval", "[StartsAt] < [EndsAt]");
+                        });
+                });
+
+            modelBuilder.Entity("BrothersCare.Domain.Care.ProfessionalAvailabilityWindow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ClinicUnitId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly>("EndsAt")
+                        .HasColumnType("time");
+
+                    b.Property<Guid>("ProfessionalId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<TimeOnly>("StartsAt")
+                        .HasColumnType("time");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "ClinicUnitId");
+
+                    b.HasIndex("TenantId", "ProfessionalId", "ClinicUnitId", "DayOfWeek", "StartsAt")
+                        .IsUnique();
+
+                    b.ToTable("professional_availability_windows", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_professional_availability_windows_day", "[DayOfWeek] BETWEEN 0 AND 6");
+                            t.HasCheckConstraint("CK_professional_availability_windows_interval", "[StartsAt] < [EndsAt]");
+                        });
+                });
+
             modelBuilder.Entity("BrothersCare.Domain.Identity.AccountActionToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -849,6 +934,33 @@ namespace BrothersCare.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId", "TenantMembershipId")
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("BrothersCare.Domain.Care.ProfessionalAvailabilityBlock", b =>
+                {
+                    b.HasOne("BrothersCare.Domain.Care.Professional", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ProfessionalId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BrothersCare.Domain.Care.ProfessionalAvailabilityWindow", b =>
+                {
+                    b.HasOne("BrothersCare.Domain.Tenancy.ClinicUnit", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClinicUnitId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BrothersCare.Domain.Care.Professional", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ProfessionalId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("BrothersCare.Domain.Identity.AccountActionToken", b =>

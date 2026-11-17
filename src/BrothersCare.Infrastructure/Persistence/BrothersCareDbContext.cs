@@ -23,6 +23,10 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
 
     public DbSet<Professional> Professionals => Set<Professional>();
 
+    public DbSet<ProfessionalAvailabilityWindow> ProfessionalAvailabilityWindows => Set<ProfessionalAvailabilityWindow>();
+
+    public DbSet<ProfessionalAvailabilityBlock> ProfessionalAvailabilityBlocks => Set<ProfessionalAvailabilityBlock>();
+
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
     public DbSet<TenantMembership> TenantMemberships => Set<TenantMembership>();
@@ -44,6 +48,7 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         ConfigureClinicUnitMembership(modelBuilder);
         ConfigurePatient(modelBuilder);
         ConfigureProfessional(modelBuilder);
+        ConfigureProfessionalAvailability(modelBuilder);
         ConfigurePatientCareAssignment(modelBuilder);
         ConfigureAppointment(modelBuilder);
         ConfigureClinicalRecord(modelBuilder);
@@ -200,6 +205,51 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         entity.HasOne<TenantMembership>()
             .WithMany()
             .HasForeignKey(item => new { item.TenantId, item.TenantMembershipId })
+            .HasPrincipalKey(item => new { item.TenantId, item.Id })
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private static void ConfigureProfessionalAvailability(ModelBuilder modelBuilder)
+    {
+        var window = modelBuilder.Entity<ProfessionalAvailabilityWindow>();
+        window.ToTable("professional_availability_windows", table =>
+        {
+            table.HasCheckConstraint("CK_professional_availability_windows_day", "[DayOfWeek] BETWEEN 0 AND 6");
+            table.HasCheckConstraint("CK_professional_availability_windows_interval", "[StartsAt] < [EndsAt]");
+        });
+        ConfigureTenantScopedKey(window);
+        window.Property(item => item.DayOfWeek).HasConversion<int>().IsRequired();
+        window.Property(item => item.StartsAt).HasColumnType("time").IsRequired();
+        window.Property(item => item.EndsAt).HasColumnType("time").IsRequired();
+        window.HasIndex(item => new
+        {
+            item.TenantId,
+            item.ProfessionalId,
+            item.ClinicUnitId,
+            item.DayOfWeek,
+            item.StartsAt,
+        }).IsUnique();
+        window.HasOne<Professional>()
+            .WithMany()
+            .HasForeignKey(item => new { item.TenantId, item.ProfessionalId })
+            .HasPrincipalKey(item => new { item.TenantId, item.Id })
+            .OnDelete(DeleteBehavior.Restrict);
+        window.HasOne<ClinicUnit>()
+            .WithMany()
+            .HasForeignKey(item => new { item.TenantId, item.ClinicUnitId })
+            .HasPrincipalKey(item => new { item.TenantId, item.Id })
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var block = modelBuilder.Entity<ProfessionalAvailabilityBlock>();
+        block.ToTable("professional_availability_blocks", table =>
+            table.HasCheckConstraint("CK_professional_availability_blocks_interval", "[StartsAt] < [EndsAt]"));
+        ConfigureTenantScopedKey(block);
+        block.Property(item => item.Kind).HasConversion<int>().IsRequired();
+        block.Property(item => item.Reason).HasMaxLength(ProfessionalAvailabilityBlock.ReasonMaxLength);
+        block.HasIndex(item => new { item.TenantId, item.ProfessionalId, item.StartsAt });
+        block.HasOne<Professional>()
+            .WithMany()
+            .HasForeignKey(item => new { item.TenantId, item.ProfessionalId })
             .HasPrincipalKey(item => new { item.TenantId, item.Id })
             .OnDelete(DeleteBehavior.Restrict);
     }
