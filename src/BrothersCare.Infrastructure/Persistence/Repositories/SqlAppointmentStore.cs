@@ -315,6 +315,24 @@ public sealed class SqlAppointmentStore(BrothersCareDbContext dbContext) : IAppo
             return new(professionalConflict, patientConflict);
         }
 
+        public async Task<IReadOnlyList<AppointmentConflictWindow>> ListSchedulingConflictWindowsAsync(
+            Guid tenantId,
+            Guid professionalId,
+            Guid patientId,
+            DateTimeOffset from,
+            DateTimeOffset through,
+            Guid? excludedAppointmentId,
+            CancellationToken cancellationToken) =>
+            await context.Appointments.AsNoTracking()
+                .Where(item => item.TenantId == tenantId &&
+                    item.Status == AppointmentStatus.Scheduled &&
+                    (excludedAppointmentId == null || item.Id != excludedAppointmentId) &&
+                    (item.ProfessionalId == professionalId || item.PatientId == patientId) &&
+                    item.StartsAt < through && item.EndsAt > from)
+                .Select(item => new AppointmentConflictWindow(
+                    item.Id, item.ProfessionalId, item.PatientId, item.StartsAt, item.EndsAt))
+                .ToArrayAsync(cancellationToken);
+
         public Task<Appointment?> FindAppointmentForUpdateAsync(
             Guid tenantId,
             Guid professionalId,

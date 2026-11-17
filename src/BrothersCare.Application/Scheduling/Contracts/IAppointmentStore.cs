@@ -114,6 +114,15 @@ public interface IAppointmentTransaction : IAsyncDisposable
         Guid? excludedAppointmentId,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<AppointmentConflictWindow>> ListSchedulingConflictWindowsAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid patientId,
+        DateTimeOffset from,
+        DateTimeOffset through,
+        Guid? excludedAppointmentId,
+        CancellationToken cancellationToken);
+
     Task<Appointment?> FindAppointmentForUpdateAsync(
         Guid tenantId,
         Guid professionalId,
@@ -147,6 +156,13 @@ public sealed record SchedulingPatientOption(Guid Id, string FullName, string? H
 public sealed record SchedulingClinicUnitOption(Guid Id, string Name, string TimeZoneId);
 
 public sealed record AppointmentConflicts(bool Professional, bool Patient);
+
+public sealed record AppointmentConflictWindow(
+    Guid AppointmentId,
+    Guid ProfessionalId,
+    Guid PatientId,
+    DateTimeOffset StartsAt,
+    DateTimeOffset EndsAt);
 
 /// <summary>Agendamento com os dados mínimos de paciente e unidade para exibição na agenda.</summary>
 public sealed record AppointmentScheduleItem(

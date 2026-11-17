@@ -332,6 +332,24 @@ internal sealed class IdentityMemoryStore : IAuthenticationStore, IAuthenticatio
             overlapping.Any(item => item.PatientId == patientId)));
     }
 
+    public Task<IReadOnlyList<AppointmentConflictWindow>> ListSchedulingConflictWindowsAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid patientId,
+        DateTimeOffset from,
+        DateTimeOffset through,
+        Guid? excludedAppointmentId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AppointmentConflictWindow>>(Appointments
+            .Where(item => item.TenantId == tenantId &&
+                item.Status == AppointmentStatus.Scheduled &&
+                (excludedAppointmentId is null || item.Id != excludedAppointmentId) &&
+                (item.ProfessionalId == professionalId || item.PatientId == patientId) &&
+                item.StartsAt < through && item.EndsAt > from)
+            .Select(item => new AppointmentConflictWindow(
+                item.Id, item.ProfessionalId, item.PatientId, item.StartsAt, item.EndsAt))
+            .ToArray());
+
     public Task<Appointment?> FindAppointmentForUpdateAsync(
         Guid tenantId,
         Guid professionalId,
