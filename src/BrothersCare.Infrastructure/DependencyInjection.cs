@@ -97,6 +97,8 @@ public static class DependencyInjection
             services.AddScoped<GetPatientRegistrationOptions>();
             services.AddScoped<ListPatients>();
             services.AddScoped<ManagePatient>();
+            services.AddScoped<IClinicalRecordStore, SqlClinicalRecordStore>();
+            services.AddScoped<ManageClinicalRecords>();
             services.AddScoped<IAppointmentStore, SqlAppointmentStore>();
             services.AddScoped<CreateAppointment>();
             services.AddScoped<GetSchedulingOptions>();
