@@ -2,6 +2,8 @@ namespace BrothersCare.Domain.Care;
 
 public sealed class ClinicalRecord
 {
+    public const int MaximumSectionLength = 100_000;
+
     private ClinicalRecord()
     {
     }
@@ -9,55 +11,75 @@ public sealed class ClinicalRecord
     public ClinicalRecord(
         Guid id,
         Guid tenantId,
-        Guid appointmentId,
         Guid patientId,
+        Guid clinicUnitId,
         Guid authorMembershipId,
-        string content,
+        Guid? appointmentId,
+        string? patientReport,
+        string? proceduresAndObservations,
+        string? assessmentAndPlan,
         DateTimeOffset createdAt)
     {
-        if (id == Guid.Empty || tenantId == Guid.Empty || appointmentId == Guid.Empty ||
-            patientId == Guid.Empty || authorMembershipId == Guid.Empty)
+        if (id == Guid.Empty || tenantId == Guid.Empty || patientId == Guid.Empty ||
+            clinicUnitId == Guid.Empty || authorMembershipId == Guid.Empty || appointmentId == Guid.Empty)
         {
             throw new ArgumentException("Clinical record ids are required.");
         }
 
         Id = id;
         TenantId = tenantId;
-        AppointmentId = appointmentId;
         PatientId = patientId;
+        ClinicUnitId = clinicUnitId;
         AuthorMembershipId = authorMembershipId;
-        UpdateContent(content);
+        AppointmentId = appointmentId;
         CreatedAt = createdAt;
         Status = ClinicalRecordStatus.Draft;
+        Update(patientReport, proceduresAndObservations, assessmentAndPlan, createdAt);
     }
 
     public Guid Id { get; private set; }
 
     public Guid TenantId { get; private set; }
 
-    public Guid AppointmentId { get; private set; }
+    public Guid? AppointmentId { get; private set; }
 
     public Guid PatientId { get; private set; }
 
+    public Guid ClinicUnitId { get; private set; }
+
     public Guid AuthorMembershipId { get; private set; }
 
-    public string Content { get; private set; } = string.Empty;
+    public string PatientReport { get; private set; } = string.Empty;
+
+    public string ProceduresAndObservations { get; private set; } = string.Empty;
+
+    public string AssessmentAndPlan { get; private set; } = string.Empty;
 
     public ClinicalRecordStatus Status { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
 
+    public DateTimeOffset UpdatedAt { get; private set; }
+
     public DateTimeOffset? FinalizedAt { get; private set; }
 
-    public void UpdateContent(string content)
+    public byte[] Version { get; private set; } = [];
+
+    public void Update(
+        string? patientReport,
+        string? proceduresAndObservations,
+        string? assessmentAndPlan,
+        DateTimeOffset updatedAt)
     {
         if (Status == ClinicalRecordStatus.Finalized)
         {
             throw new InvalidOperationException("A finalized clinical record cannot be overwritten.");
         }
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(content);
-        Content = content.Trim();
+        PatientReport = NormalizeSection(patientReport);
+        ProceduresAndObservations = NormalizeSection(proceduresAndObservations);
+        AssessmentAndPlan = NormalizeSection(assessmentAndPlan);
+        UpdatedAt = updatedAt;
     }
 
     public void Finalize(DateTimeOffset finalizedAt)
@@ -67,8 +89,26 @@ public sealed class ClinicalRecord
             throw new InvalidOperationException("The clinical record is already finalized.");
         }
 
+        if (string.IsNullOrWhiteSpace(ProceduresAndObservations) ||
+            string.IsNullOrWhiteSpace(AssessmentAndPlan))
+        {
+            throw new InvalidOperationException("Procedures and assessment are required to finalize a clinical record.");
+        }
+
         Status = ClinicalRecordStatus.Finalized;
         FinalizedAt = finalizedAt;
+        UpdatedAt = finalizedAt;
+    }
+
+    private static string NormalizeSection(string? value)
+    {
+        var normalized = value?.Trim() ?? string.Empty;
+        if (normalized.Length > MaximumSectionLength)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value), $"Clinical sections cannot exceed {MaximumSectionLength} characters.");
+        }
+
+        return normalized;
     }
 }
 

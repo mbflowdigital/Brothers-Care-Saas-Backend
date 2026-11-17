@@ -261,14 +261,22 @@ public sealed class BrothersCareDbContext(DbContextOptions<BrothersCareDbContext
         var entity = modelBuilder.Entity<ClinicalRecord>();
         entity.ToTable("clinical_records");
         ConfigureTenantScopedKey(entity);
-        entity.Property(item => item.Content).HasColumnType("nvarchar(max)").IsRequired();
+        entity.Property(item => item.PatientReport).HasColumnType("nvarchar(max)").IsRequired();
+        entity.Property(item => item.ProceduresAndObservations).HasColumnType("nvarchar(max)").IsRequired();
+        entity.Property(item => item.AssessmentAndPlan).HasColumnType("nvarchar(max)").IsRequired();
         entity.Property(item => item.Status).HasConversion<int>().IsRequired();
-        entity.HasIndex(item => new { item.TenantId, item.AppointmentId }).IsUnique();
+        entity.Property(item => item.Version).IsRowVersion().IsConcurrencyToken();
+        entity.HasIndex(item => new { item.TenantId, item.AppointmentId });
         entity.HasIndex(item => new { item.TenantId, item.PatientId, item.CreatedAt });
         entity.HasIndex(item => new { item.TenantId, item.AuthorMembershipId, item.Status });
         entity.HasOne<Appointment>()
             .WithMany()
             .HasForeignKey(item => new { item.TenantId, item.AppointmentId })
+            .HasPrincipalKey(item => new { item.TenantId, item.Id })
+            .OnDelete(DeleteBehavior.Restrict);
+        entity.HasOne<ClinicUnit>()
+            .WithMany()
+            .HasForeignKey(item => new { item.TenantId, item.ClinicUnitId })
             .HasPrincipalKey(item => new { item.TenantId, item.Id })
             .OnDelete(DeleteBehavior.Restrict);
         entity.HasOne<Patient>()
