@@ -102,6 +102,7 @@ public static class DependencyInjection
             services.AddScoped<GetSchedulingOptions>();
             services.AddScoped<ListAppointments>();
             services.AddScoped<GetAppointment>();
+            services.AddScoped<RescheduleAppointment>();
             services.AddScoped<ITenantInvitationStore, SqlTenantInvitationStore>();
             services.AddScoped<ListTenantTeam>();
             services.AddScoped<ManageTenantTeam>();

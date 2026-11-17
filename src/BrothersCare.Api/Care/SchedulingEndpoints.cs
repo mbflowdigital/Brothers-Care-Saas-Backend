@@ -39,7 +39,7 @@ public static class SchedulingEndpoints
             .RequireAuthorization()
             .WithTags("Agenda")
             .WithName("GetAppointment")
-            .WithSummary("Consulta um agendamento do profissional autenticado.")
+            .WithSummary("Consulta um agendamento autorizado na empresa ativa.")
             .Produces<AppointmentScheduleItem>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -52,6 +52,20 @@ public static class SchedulingEndpoints
             .WithSummary("Agenda um atendimento para um paciente sob os cuidados do profissional.")
             .WithDescription("Tenant, profissional e membership são derivados da sessão. Horários devem incluir offset.")
             .Produces<AppointmentItem>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
+
+        endpoints.MapPatch("/api/v1/appointments/{appointmentId:guid}", RescheduleAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("RescheduleAppointment")
+            .WithSummary("Reagenda um atendimento agendado do profissional autenticado.")
+            .WithDescription("Revalida unidade, horário e conflitos sem criar outro atendimento. Datas devem conter offset.")
+            .Produces<AppointmentItem>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -223,6 +237,74 @@ public static class SchedulingEndpoints
         };
     }
 
+    private static async Task<Results<Ok<AppointmentItem>, ProblemHttpResult>> RescheduleAsync(
+        Guid appointmentId,
+        [FromBody] RescheduleAppointmentRequest? request,
+        [FromServices] RescheduleAppointment rescheduleAppointment,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var result = await rescheduleAppointment.ExecuteAsync(
+            request is null
+                ? new RescheduleAppointmentCommand(appointmentId, Guid.Empty, default, default)
+                : new RescheduleAppointmentCommand(
+                    appointmentId,
+                    request.ClinicUnitId,
+                    request.StartsAt,
+                    request.EndsAt),
+            cancellationToken);
+
+        if (result.Status == RescheduleAppointmentStatus.Success)
+        {
+            return TypedResults.Ok(result.Appointment
+                ?? throw new InvalidOperationException("A successful reschedule result must contain an appointment."));
+        }
+
+        return result.Status switch
+        {
+            RescheduleAppointmentStatus.Unauthenticated => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status401Unauthorized,
+                "Sessão ausente, inválida ou expirada.",
+                "authentication-required"),
+            RescheduleAppointmentStatus.Forbidden or
+                RescheduleAppointmentStatus.ClinicUnitNotAvailable => AuthenticationProblems.Create(
+                    context,
+                    StatusCodes.Status403Forbidden,
+                    "O agendamento ou a unidade não está disponível para este profissional.",
+                    "forbidden"),
+            RescheduleAppointmentStatus.ProfessionalNotFound or
+                RescheduleAppointmentStatus.NotFound => AuthenticationProblems.Create(
+                    context,
+                    StatusCodes.Status404NotFound,
+                    "Agendamento não encontrado.",
+                    "appointment-not-found"),
+            RescheduleAppointmentStatus.NotScheduled => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status409Conflict,
+                "Somente atendimentos agendados podem ser reagendados.",
+                "invalid-appointment-status"),
+            RescheduleAppointmentStatus.StartsInPast => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status422UnprocessableEntity,
+                "O novo horário inicial precisa estar no presente ou no futuro.",
+                "business-rule"),
+            RescheduleAppointmentStatus.ProfessionalConflict or
+                RescheduleAppointmentStatus.PatientConflict => AuthenticationProblems.Create(
+                    context,
+                    StatusCodes.Status409Conflict,
+                    "O novo horário conflita com outro agendamento ativo.",
+                    "appointment-conflict"),
+            RescheduleAppointmentStatus.InvalidInput => AuthenticationProblems.Create(
+                context,
+                StatusCodes.Status400BadRequest,
+                "Informe unidade e um novo intervalo de horário válido.",
+                "validation"),
+            _ => throw new InvalidOperationException($"Unsupported appointment reschedule status: {result.Status}."),
+        };
+    }
+
     private static async Task<Results<Ok<SchedulingOptions>, ProblemHttpResult>> GetOptionsAsync(
         [FromServices] GetSchedulingOptions getSchedulingOptions,
         HttpContext context,
@@ -280,6 +362,15 @@ public sealed record CreateAppointmentRequest(
     [property: JsonConverter(typeof(RequiredOffsetDateTimeOffsetJsonConverter))]
     DateTimeOffset EndsAt,
     string? Notes);
+
+/// <summary>Novo local e horário de um atendimento agendado.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record RescheduleAppointmentRequest(
+    Guid ClinicUnitId,
+    [property: JsonConverter(typeof(RequiredOffsetDateTimeOffsetJsonConverter))]
+    DateTimeOffset StartsAt,
+    [property: JsonConverter(typeof(RequiredOffsetDateTimeOffsetJsonConverter))]
+    DateTimeOffset EndsAt);
 
 public sealed class RequiredOffsetDateTimeOffsetJsonConverter : JsonConverter<DateTimeOffset>
 {

@@ -113,6 +113,8 @@ public sealed class AppointmentQueriesTests
             from, from.AddDays(1), null, secondProfessional.Id, null, CancellationToken.None);
         var byUnit = await List(context.Scenario).ExecuteAsync(
             from, from.AddDays(1), null, null, secondUnit.Id, CancellationToken.None);
+        var administratorDetail = await Get(context.Scenario)
+            .ExecuteAsync(secondAppointment.Id, CancellationToken.None);
 
         Assert.Equal(AppointmentQueryStatus.Success, all.Status);
         Assert.Equal(
@@ -121,6 +123,8 @@ public sealed class AppointmentQueriesTests
         Assert.Equal(secondUser.DisplayName,
             Assert.Single(byProfessional.Appointments!).ProfessionalName);
         Assert.Equal(secondAppointment.Id, Assert.Single(byUnit.Appointments!).Id);
+        Assert.Equal(AppointmentQueryStatus.Success, administratorDetail.Status);
+        Assert.Equal(secondAppointment.Id, administratorDetail.Appointment!.Id);
 
         context.Scenario.SignIn(context.User, context.Membership);
         var attemptedScopeChange = await List(context.Scenario).ExecuteAsync(

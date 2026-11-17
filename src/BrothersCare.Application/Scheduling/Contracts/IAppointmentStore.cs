@@ -55,6 +55,13 @@ public interface IAppointmentTransaction : IAsyncDisposable
         Guid patientId,
         DateTimeOffset startsAt,
         DateTimeOffset endsAt,
+        Guid? excludedAppointmentId,
+        CancellationToken cancellationToken);
+
+    Task<Appointment?> FindAppointmentForUpdateAsync(
+        Guid tenantId,
+        Guid professionalId,
+        Guid appointmentId,
         CancellationToken cancellationToken);
 
     Task<IReadOnlyList<AppointmentScheduleItem>> ListAppointmentsAsync(
@@ -68,7 +75,7 @@ public interface IAppointmentTransaction : IAsyncDisposable
 
     Task<AppointmentScheduleItem?> FindAppointmentAsync(
         Guid tenantId,
-        Guid professionalId,
+        Guid? professionalId,
         Guid appointmentId,
         CancellationToken cancellationToken);
 

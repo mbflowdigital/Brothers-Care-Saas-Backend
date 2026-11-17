@@ -131,10 +131,12 @@ public sealed class SqlAppointmentStore(BrothersCareDbContext dbContext) : IAppo
             Guid patientId,
             DateTimeOffset startsAt,
             DateTimeOffset endsAt,
+            Guid? excludedAppointmentId,
             CancellationToken cancellationToken)
         {
             var activeOverlaps = context.Appointments.AsNoTracking().Where(item =>
                 item.TenantId == tenantId && item.Status == AppointmentStatus.Scheduled &&
+                (excludedAppointmentId == null || item.Id != excludedAppointmentId) &&
                 item.StartsAt < endsAt && item.EndsAt > startsAt);
             var professionalConflict = await activeOverlaps.AnyAsync(
                 item => item.ProfessionalId == professionalId,
@@ -144,6 +146,15 @@ public sealed class SqlAppointmentStore(BrothersCareDbContext dbContext) : IAppo
                 cancellationToken);
             return new(professionalConflict, patientConflict);
         }
+
+        public Task<Appointment?> FindAppointmentForUpdateAsync(
+            Guid tenantId,
+            Guid professionalId,
+            Guid appointmentId,
+            CancellationToken cancellationToken) =>
+            context.Appointments.SingleOrDefaultAsync(item =>
+                item.TenantId == tenantId && item.ProfessionalId == professionalId && item.Id == appointmentId,
+                cancellationToken);
 
         public async Task<IReadOnlyList<AppointmentScheduleItem>> ListAppointmentsAsync(
             Guid tenantId,
@@ -160,21 +171,26 @@ public sealed class SqlAppointmentStore(BrothersCareDbContext dbContext) : IAppo
                 (clinicUnitId == null || item.ClinicUnitId == clinicUnitId) &&
                 item.StartsAt >= from && item.StartsAt <= through &&
                 (status == null || item.Status == status));
-            return await BuildScheduleItems(appointments)
+            var orderedAppointments = appointments
                 .OrderBy(item => item.StartsAt)
-                .ThenBy(item => item.Id)
+                .ThenBy(item => item.Id);
+            var rows = await BuildScheduleRows(orderedAppointments)
                 .ToListAsync(cancellationToken);
+            return rows.Select(ToScheduleItem).ToArray();
         }
 
-        public Task<AppointmentScheduleItem?> FindAppointmentAsync(
+        public async Task<AppointmentScheduleItem?> FindAppointmentAsync(
             Guid tenantId,
-            Guid professionalId,
+            Guid? professionalId,
             Guid appointmentId,
             CancellationToken cancellationToken)
         {
             var appointments = context.Appointments.AsNoTracking().Where(item =>
-                item.TenantId == tenantId && item.ProfessionalId == professionalId && item.Id == appointmentId);
-            return BuildScheduleItems(appointments).SingleOrDefaultAsync(cancellationToken);
+                item.TenantId == tenantId &&
+                (professionalId == null || item.ProfessionalId == professionalId) &&
+                item.Id == appointmentId);
+            var row = await BuildScheduleRows(appointments).SingleOrDefaultAsync(cancellationToken);
+            return row is null ? null : ToScheduleItem(row);
         }
 
         public void Add(Appointment appointment) => context.Appointments.Add(appointment);
@@ -187,7 +203,7 @@ public sealed class SqlAppointmentStore(BrothersCareDbContext dbContext) : IAppo
 
         public ValueTask DisposeAsync() => transaction.DisposeAsync();
 
-        private IQueryable<AppointmentScheduleItem> BuildScheduleItems(IQueryable<Appointment> appointments) =>
+        private IQueryable<AppointmentScheduleRow> BuildScheduleRows(IQueryable<Appointment> appointments) =>
             from appointment in appointments
             join patient in context.Patients.AsNoTracking()
                 on new { appointment.TenantId, PatientId = appointment.PatientId }
@@ -198,7 +214,7 @@ public sealed class SqlAppointmentStore(BrothersCareDbContext dbContext) : IAppo
             join professional in context.Professionals.AsNoTracking()
                 on new { appointment.TenantId, appointment.ProfessionalId }
                 equals new { professional.TenantId, ProfessionalId = professional.Id }
-            select new AppointmentScheduleItem(
+            select new AppointmentScheduleRow(
                 appointment.Id,
                 professional.Id,
                 professional.FullName,
@@ -210,8 +226,41 @@ public sealed class SqlAppointmentStore(BrothersCareDbContext dbContext) : IAppo
                 appointment.StartsAt,
                 appointment.EndsAt,
                 appointment.Notes,
-                appointment.Status.ToString(),
+                appointment.Status,
                 appointment.CreatedAt,
                 appointment.UpdatedAt);
+
+        private static AppointmentScheduleItem ToScheduleItem(AppointmentScheduleRow row) =>
+            new(
+                row.Id,
+                row.ProfessionalId,
+                row.ProfessionalName,
+                row.PatientId,
+                row.PatientName,
+                row.ClinicUnitId,
+                row.ClinicUnitName,
+                row.TimeZoneId,
+                row.StartsAt,
+                row.EndsAt,
+                row.Notes,
+                row.Status.ToString(),
+                row.CreatedAt,
+                row.UpdatedAt);
+
+        private sealed record AppointmentScheduleRow(
+            Guid Id,
+            Guid ProfessionalId,
+            string ProfessionalName,
+            Guid PatientId,
+            string PatientName,
+            Guid ClinicUnitId,
+            string ClinicUnitName,
+            string TimeZoneId,
+            DateTimeOffset StartsAt,
+            DateTimeOffset EndsAt,
+            string? Notes,
+            AppointmentStatus Status,
+            DateTimeOffset CreatedAt,
+            DateTimeOffset UpdatedAt);
     }
 }
