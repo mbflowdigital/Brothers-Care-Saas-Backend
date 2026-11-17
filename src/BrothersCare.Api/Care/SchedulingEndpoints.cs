@@ -86,6 +86,32 @@ public static class SchedulingEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
+        endpoints.MapPost("/api/v1/appointments/{appointmentId:guid}/complete", CompleteAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("CompleteAppointment")
+            .WithSummary("Marca um atendimento iniciado como realizado.")
+            .WithDescription("Somente o profissional responsável pode concluir um atendimento após o horário de início.")
+            .Produces<AppointmentItem>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        endpoints.MapPost("/api/v1/appointments/{appointmentId:guid}/no-show", MarkNoShowAsync)
+            .RequireAuthorization()
+            .WithTags("Agenda")
+            .WithName("MarkAppointmentNoShow")
+            .WithSummary("Marca falta em um atendimento iniciado.")
+            .WithDescription("Exige um motivo e somente o profissional responsável pode marcar a falta após o horário de início.")
+            .Produces<AppointmentItem>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
         return endpoints;
     }
 
@@ -368,6 +394,61 @@ public static class SchedulingEndpoints
         };
     }
 
+    private static async Task<Results<Ok<AppointmentItem>, ProblemHttpResult>> CompleteAsync(
+        Guid appointmentId,
+        [FromServices] CompleteAppointment completeAppointment,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var result = await completeAppointment.ExecuteAsync(
+            new CompleteAppointmentCommand(appointmentId), cancellationToken);
+        if (result.Status == CompleteAppointmentStatus.Success)
+        {
+            return TypedResults.Ok(result.Appointment
+                ?? throw new InvalidOperationException("A successful completion result must contain an appointment."));
+        }
+
+        return result.Status switch
+        {
+            CompleteAppointmentStatus.Unauthenticated => AuthenticationProblems.Create(context, StatusCodes.Status401Unauthorized, "Sessão ausente, inválida ou expirada.", "authentication-required"),
+            CompleteAppointmentStatus.Forbidden => AuthenticationProblems.Create(context, StatusCodes.Status403Forbidden, "O agendamento não está disponível para este profissional.", "forbidden"),
+            CompleteAppointmentStatus.ProfessionalNotFound or CompleteAppointmentStatus.NotFound => AuthenticationProblems.Create(context, StatusCodes.Status404NotFound, "Agendamento não encontrado.", "appointment-not-found"),
+            CompleteAppointmentStatus.NotScheduled => AuthenticationProblems.Create(context, StatusCodes.Status409Conflict, "Somente atendimentos agendados podem ser marcados como realizados.", "invalid-appointment-status"),
+            CompleteAppointmentStatus.NotStarted => AuthenticationProblems.Create(context, StatusCodes.Status409Conflict, "O atendimento só pode ser marcado como realizado após o horário de início.", "appointment-not-started"),
+            CompleteAppointmentStatus.InvalidInput => AuthenticationProblems.Create(context, StatusCodes.Status400BadRequest, "Informe um agendamento válido.", "validation"),
+            _ => throw new InvalidOperationException($"Unsupported appointment completion status: {result.Status}."),
+        };
+    }
+
+    private static async Task<Results<Ok<AppointmentItem>, ProblemHttpResult>> MarkNoShowAsync(
+        Guid appointmentId,
+        [FromBody] MarkAppointmentNoShowRequest? request,
+        [FromServices] MarkAppointmentNoShow markAppointmentNoShow,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var result = await markAppointmentNoShow.ExecuteAsync(
+            new MarkAppointmentNoShowCommand(appointmentId, request?.Reason), cancellationToken);
+        if (result.Status == MarkAppointmentNoShowStatus.Success)
+        {
+            return TypedResults.Ok(result.Appointment
+                ?? throw new InvalidOperationException("A successful no-show result must contain an appointment."));
+        }
+
+        return result.Status switch
+        {
+            MarkAppointmentNoShowStatus.Unauthenticated => AuthenticationProblems.Create(context, StatusCodes.Status401Unauthorized, "Sessão ausente, inválida ou expirada.", "authentication-required"),
+            MarkAppointmentNoShowStatus.Forbidden => AuthenticationProblems.Create(context, StatusCodes.Status403Forbidden, "O agendamento não está disponível para este profissional.", "forbidden"),
+            MarkAppointmentNoShowStatus.ProfessionalNotFound or MarkAppointmentNoShowStatus.NotFound => AuthenticationProblems.Create(context, StatusCodes.Status404NotFound, "Agendamento não encontrado.", "appointment-not-found"),
+            MarkAppointmentNoShowStatus.NotScheduled => AuthenticationProblems.Create(context, StatusCodes.Status409Conflict, "Somente atendimentos agendados podem ser marcados como falta.", "invalid-appointment-status"),
+            MarkAppointmentNoShowStatus.NotStarted => AuthenticationProblems.Create(context, StatusCodes.Status409Conflict, "A falta só pode ser registrada após o horário de início.", "appointment-not-started"),
+            MarkAppointmentNoShowStatus.InvalidInput => AuthenticationProblems.Create(context, StatusCodes.Status400BadRequest, "Informe um motivo de falta com até 500 caracteres.", "validation"),
+            _ => throw new InvalidOperationException($"Unsupported no-show status: {result.Status}."),
+        };
+    }
+
     private static async Task<Results<Ok<SchedulingOptions>, ProblemHttpResult>> GetOptionsAsync(
         [FromServices] GetSchedulingOptions getSchedulingOptions,
         HttpContext context,
@@ -438,6 +519,10 @@ public sealed record RescheduleAppointmentRequest(
 /// <summary>Motivo obrigatório para cancelar um atendimento agendado.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CancelAppointmentRequest(string? Reason);
+
+/// <summary>Motivo obrigatório para registrar a falta do paciente.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record MarkAppointmentNoShowRequest(string? Reason);
 
 public sealed class RequiredOffsetDateTimeOffsetJsonConverter : JsonConverter<DateTimeOffset>
 {
